@@ -20,8 +20,9 @@
               paths   (mapcat #(filter (fn [k]
                                          (and (vector? k)
                                               (= (first k) %))) watches) removed)]
-          (doseq [path paths]
-            (remove-watch registry path)))))))
+          (when (seq paths)
+            (doseq [path paths]
+              (remove-watch registry path))))))))
 
 (add-watch registry :change registry-watcher)
 

@@ -64,90 +64,53 @@
           :style {:display "none"}}
          value-container-map-overrides) (str value)]])))
 
-#_(defn slider
-  [{:keys [id min max value block-id] :as val-map}]
-  [:div.control.row
-   [:span.col-4 (str id "  ")]
-   [:span.col-1 min]
-   [:span.slider-container.col
-    [(keyword (str "input#" (name id) ".slider"))
-     (merge
-       {:type       "range"
-        :min        1
-        :max        100
-        :val        50
-        :hx-get     (str "/controller/" id)
-        :hx-target  (str "#" (name id) "-value")
-        :hx-trigger "input"
-        :hx-vals    (str "js:{"
-                         "\"block-id\": \"" block-id "\", "
-                         "type: \":slider\", "
-                         "value: document.getElementById('" (name id) "').value, "
-                         "min: " min ", "
-                         "max: " max ", " "}")}
-       val-map)]]
-   [:span.col-1 max]
-   [(keyword (str "div#" (name id) "-value" ".col-1"))
-    {:style {:display     "inline-block"
-             :margin-left "10px"}}
-    value]])
+(defmulti render-controller type)
+(defmethod render-controller :default [m] (base-component m))
+(defmethod render-controller Num      [m] (base-component m))
+(defmethod render-controller Text     [m] (base-component m))
+(defmethod render-controller Slider   [m] (base-component m {} {:style {:display "inline-block"}}))
+(defmethod render-controller EdnBlock [m] (let [val (str (:value m))] (base-component (assoc m :value val))))
 
-#_(defn number
-  [{:keys [id value block-id] :as val-map}]
-  [:div.control.row
-   [:span.col-4 (str id "  ")]
-   [:span.num-container.col-2
-    [(keyword (str "input#" (name id) ".number" ".form-control-sm"))
+(defn render-control-block-result
+  [{:keys [id state]} oob?]
+  (let [result @state]
+    [:div.text-center
      (merge
-       {:type      "number"
-        :min       1
-        :hx-get    (str "/controller/" id)
-        :hx-target (str "#" (name id) "-value")
-        :hx-vals   (str "js:{"
-                         "\"block-id\": \"" block-id "\", "
-                         "type: \":num\", "
-                         "value: document.getElementById('" (name id) "').value, "
-                         #_#_#_"min: " min ", "
-                         #_#_#_"max: " max ", " "}")}
-       val-map)]
-    [(keyword (str "div#" (name id) "-value"))
-     {:style {:display "none"}}
-     value]]])
+       {:id          (str (name id) "-result")
+        :class       "control-block-result"}
+       (when oob? {:hx-swap-oob "innerHTML"}))
+     result]))
 
-#_(defn text
-  [{:keys [id value] :as val-map}]
-  [:div.control.row
-   [:span.col-4 (str id "  ")]
-   [:span.text-container.col-3
-    [(keyword (str "input#" (name id) ".text" ".form-control-sm"))
-     (merge
-       {:type      "text"
-        :hx-get    (str "/controller/" id)
-        :hx-swap   "none"
-        :hx-vals   (str "js:{"
-                        "type: \":text\", "
-                        "value: document.getElementById('" (name id) "').value, "
-                        "}")}
-       val-map)]]
-   [(keyword (str "div#" (name id) "-value"))
-    {:style {:display "none"}}
-    value]])
+(defn render-control-block
+  [{:keys [id control-ids] :as control-block}]
+  (let [controls (map @c/registry control-ids)]
+    [:div.col.g-4
+     [:div.card.shadow {:id id}
+      [:div.card-body
+       [:div.row
+        [:div.col [:h5.card-title id]]
+        [:div.col-1
+         [:button.btn-close.text-end
+          {:hx-post (str "/action/delete/" id)
+           :hx-swap "none"}]]]
+       (into [:div.row.controls] (mapv render-controller controls))
+       [:div.row (render-control-block-result control-block false)]
+       [:div.row
+        [:div.col [:button.btn.btn-outline-secondary.btn-sm
+                   {:hx-post (str "/action/def/" id)
+                    :hx-swap "none"} "def"]]]]]]))
 
-(defn edn-block
-  [{:keys [id value block-id]}]
-  [:div.control.row
-   [:span.col-4 (str id "  ")]
-   [:span.edn-container
-    [(keyword (str "input#" (name id) ".edn" ".form-control"))
-     {:type    "text"
-      :value   (str value)
-      :hx-get  (str "/controller/" id)
-      :hx-swap "none"
-      :hx-vals (str "js:{"
-                    "\"block-id\": \"" block-id "\", "
-                    "control-type: \":edn\", "
-                    "value: document.getElementById('" (name id) "').value, "
-                    "}")}]]])
+
+
+
+
+
+
+
+
+
+
+
 
 #_(defn toggle
   [{:keys [id value] :as val-map}]
@@ -238,45 +201,3 @@
     [(keyword (str "div#" (name id) "-value"))
      {:style {:display "none"}}
      value]]])
-
-(defmulti render-controller type)
-
-(defmethod render-controller :default [m] (base-component m))
-(defmethod render-controller Num      [m] (base-component m))
-(defmethod render-controller Text     [m] (base-component m))
-(defmethod render-controller Slider   [m] (base-component m {} {:style {:display "inline-block"}}))
-(defmethod render-controller EdnBlock [m] (let [val (str (:value m))] (base-component (assoc m :value val))))
-#_(defmethod render-controller "radio"    [m] (radio m))
-#_(defmethod render-controller "toggle"   [m] (toggle m))
-#_(defmethod render-controller "checkbox" [m] (checkbox m))
-#_(defmethod render-controller "dropdown" [m] (dropdown m))
-
-
-(defn render-control-block-result
-  [{:keys [id state]} oob?]
-  (let [result @state]
-    [:div.text-center
-     (merge
-       {:id          (str (name id) "-result")
-        :class       "control-block-result"}
-       (when oob? {:hx-swap-oob "innerHTML"}))
-     result]))
-
-(defn render-control-block
-  [{:keys [id control-ids] :as control-block}]
-  (let [controls (map @c/registry control-ids)]
-    [:div.col.g-4
-     [:div.card.shadow {:id id}
-      [:div.card-body
-       [:div.row
-        [:div.col [:h5.card-title id]]
-        [:div.col-1
-         [:button.btn-close.text-end
-          {:hx-post (str "/action/delete/" id)
-           :hx-swap "none"}]]]
-       (into [:div.row.controls] (mapv render-controller controls))
-       [:div.row (render-control-block-result control-block false)]
-       [:div.row
-        [:div.col [:button.btn.btn-outline-secondary.btn-sm
-                   {:hx-post (str "/action/def/" id)
-                    :hx-swap "none"} "def"]]]]]]))

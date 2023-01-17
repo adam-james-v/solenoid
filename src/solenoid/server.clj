@@ -38,15 +38,11 @@
      [:meta {:name    "viewport"
              :content "width=device-width, initial-scale=1"}]
      [:title "solenoid"]
-     #_[:link {:href "https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" :rel "stylesheet"}]
-     #_[:script {:src "https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"}]
-     [:style (slurp "resources/bootstrap.min.css")]
-     [:script (slurp "resources/bootstrap.bundle.min.js")]
-     [:style (slurp "resources/style.css")]
-     #_[:script {:src "https://unpkg.com/htmx.org@1.8.4/dist/htmx.min.js"}]
-     #_[:script {:src "https://unpkg.com/htmx.org@1.8.4/dist/ext/sse.js" :defer true}]
-     [:script (slurp "resources/htmx.min.js")]
-     [:script (slurp "resources/sse.js")]]
+     [:style (slurp (io/resource "bootstrap.min.css"))]
+     [:script (slurp (io/resource "bootstrap.bundle.min.js"))]
+     [:style (slurp (io/resource "style.css"))]
+     [:script (slurp (io/resource "htmx.min.js"))]
+     [:script (slurp (io/resource "sse.js"))]]
     [:body.d-flex.flex-column.h-100
      {:data-bs-theme "dark"}
      [:span {:class       "container-fluid"
@@ -77,10 +73,8 @@
                       control-ids         (get-in @c/registry [id :control-ids])]
                   (case action
                     :delete
-                    (do (swap! c/registry dissoc id)
-                        (when (seq control-ids)
-                          (doseq [control-id control-ids]
-                            (swap! c/registry dissoc control-id))))
+                    ;; dissoc all of the controls and the control-block in one go, causing only one :reload
+                    (swap! c/registry (fn [m] (apply (partial dissoc m) (conj control-ids id))))
 
                     :def
                     (let [state (get-in @c/registry [id :state])
