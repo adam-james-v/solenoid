@@ -14,7 +14,6 @@
 (defn app-body
   []
   [:section#app
-   [:h3.mt-4.text-center "solenoid"]
    [:main
     [:div.container
      (into
@@ -54,6 +53,7 @@
         :hx-target  "#reloader"}
        (app-body)]]
      [:footer.footer.mt-auto.py-3
+      [:h3.mt-4.text-center "solenoid"]
       [:div.container
        [:p "Created by "
         [:a {:href "https://twitter.com/RustyVermeer"} "adam-james"]]]]])))

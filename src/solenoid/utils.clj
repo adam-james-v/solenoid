@@ -56,7 +56,7 @@
                  (into {}))]
       (-> m
           (update-vals url-encoded-str->str)
-          (update-vals #(or (maybe-read-string %) %))
+          (update-vals maybe-read-string)
           (update-keys keyword)))
     {}))
 

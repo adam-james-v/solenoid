@@ -79,13 +79,13 @@
        {:id          (str (name id) "-result")
         :class       "control-block-result"}
        (when oob? {:hx-swap-oob "innerHTML"}))
-     result]))
+     (or result "no result")]))
 
 (defn render-control-block
   [{:keys [id control-ids] :as control-block}]
   (let [controls (map @c/registry control-ids)]
     [:div.col.g-4
-     [:div.card.shadow {:id id}
+     [:div.card {:id id}
       [:div.card-body
        [:div.row
         [:div.col [:h5.card-title id]]
