@@ -98,7 +98,7 @@
                                                               (u/get-string-value query-string)
                                                               value)
                       block-id                              (when block-id (u/stringified-key->keyword block-id))]
-                  (swap! c/registry assoc-in [id :value] value)
+                  (when value (swap! c/registry assoc-in [id :value] value))
                   {:status 200
                    :body   (str (h/html (if (= (keyword control-type) :edn) (str value) value))
                                 (when block-id
