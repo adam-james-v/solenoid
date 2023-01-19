@@ -11,7 +11,6 @@ I'll update this readme with a real example shortly. Here's a trivial one to get
 
 (ss/serve!) ;; webpage served on port 9876
 
-
 (def example
   (c/letcontrols [a {:type :num :value 140 :display-name "Base R"}
                   b {:type :num :value 140 :display-name "Top R"}

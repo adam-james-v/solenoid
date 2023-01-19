@@ -47,18 +47,19 @@
 
   ([{:keys [id display-name value min max control-type] :as control} input-map-overrides value-container-map-overrides]
    (let [get-value-js-str (str "document.getElementById('" (name id) "').value")]
-     [:div.control.row
-      [:span.col-4 (str (or display-name id))]
-      (when min [:span.col min])
-      [:span.col {:class (str (name control-type) "-container")}
-       [:input
-        (merge
-          (make-input-map control)
-          {:hx-vals (make-hx-vals control get-value-js-str)}
-          control
-          input-map-overrides)]]
-      (when max [:span.col max])
-      [:span.col-1
+     [:div.control.row.my-1.mx-0.p-0
+      [:span.col-3.text-end.mb-0.mt-2 (str (or display-name id))]
+      [:span.col-7 {:class (str (name control-type) "-container")}
+       [:div.row.small
+        (when min [:span.col-2.text-end.mb-0.mt-1 min])
+        [:input.col.col
+         (merge
+           (make-input-map control)
+           {:hx-vals (make-hx-vals control get-value-js-str)}
+           control
+           input-map-overrides)]
+        (when max [:span.col-2.mb-0.mt-1 max])]]
+      [:span.col-2.mb-0.mt-1
        (merge
          {:id    (str (name id) "-value")
           :style {:display "none"}}
@@ -86,15 +87,15 @@
   (let [controls (map @c/registry control-ids)]
     [:div.col.g-4
      [:div.card {:id id}
+      [:div.card-header
+       [:span.row
+        [:h5.col.card-title.mb-0.mt-1 id]
+        [:button.btn-close.text-end.col-1.px-2
+         {:hx-post (str "/action/delete/" id)
+          :hx-swap "none"}]]]
       [:div.card-body
-       [:div.row
-        [:div.col [:h5.card-title id]]
-        [:div.col-1
-         [:button.btn-close.text-end
-          {:hx-post (str "/action/delete/" id)
-           :hx-swap "none"}]]]
        (into [:div.row.controls] (mapv render-controller controls))
-       [:div.row (render-control-block-result control-block false)]
+       [:div.row.my-3 (render-control-block-result control-block false)]
        [:div.row
         [:div.col [:button.btn.btn-outline-secondary.btn-sm
                    {:hx-post (str "/action/def/" id)
