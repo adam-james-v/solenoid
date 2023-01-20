@@ -110,7 +110,7 @@ Then, open the `examples/examples-script.clj` file and evaluate. Have fun!
 (require '[babashka.deps :as deps])
 (deps/add-deps
   '{:deps {adam-james-v/solenoid {:git/url "https://github.com/adam-james-v/solenoid/"
-                                  :sha "3384b4f161bf475b028fb5b6cfe08c0592c53558"}}})
+                                  :sha "a79450017ab044058d630485599da7ce42a109fe"}}})
 
 (ns solenoid.example
   (:require [clojure.string :as str]
