@@ -17,7 +17,7 @@
    [:main
     [:div.container
      (into
-       [:div.row.row-cols-1.row-cols-sm-1.row-cols-md-1.row-cols-lg-2.g-2]
+       [:div.row.row-cols-1.row-cols-sm-1.row-cols-md-2.row-cols-lg-3.row-cols-xl-4.g-2]
        ;; PROBLEM: clean up this rendering a bit.
        (concat
          (mapv components/render-controller
@@ -137,5 +137,6 @@
     (@server :timeout 100)
     (reset! server nil)))
 
-(defn serve! []
-  (reset! server (srv/run-server #'app {:port port})))
+(defn serve!
+  ([] (serve! port))
+  ([port] (reset! server (srv/run-server #'app {:port port}))))
