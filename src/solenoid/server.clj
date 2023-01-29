@@ -28,65 +28,73 @@
                (filter #(str/includes? (name (:id %)) "controlblock") (vals @c/registry)))))]]])
 
 (defn template
-  []
+  [& {:keys [head-entries]}]
   (list
-   "<!DOCTYPE html>"
-   (h/html
-    [:head
-     [:meta {:charset "UTF-8"}]
-     [:meta {:name    "viewport"
-             :content "width=device-width, initial-scale=1"}]
-     [:title "solenoid"]
-     [:style (slurp (io/resource "bootstrap.min.css"))]
-     [:script (slurp (io/resource "bootstrap.bundle.min.js"))]
-     [:style (slurp (io/resource "style.css"))]
-     [:script (slurp (io/resource "htmx.min.js"))]
-     [:script (slurp (io/resource "sse.js"))]]
-    [:body.d-flex.flex-column.h-100
-     {:data-bs-theme "dark"}
-     [:span {:class       "container-fluid"
-             :hx-ext      "sse"
-             :sse-connect "/events"}
-      [:div#reloader.row
-       {:hx-trigger "sse:reload"
-        :hx-get     "/reload"
-        :hx-target  "#reloader"}
-       (app-body)]]
-     [:footer.footer.mt-auto.py-3
-      [:h3.mt-4.text-center "solenoid"]
-      [:div.container
-       [:p "Created by "
-        [:a {:href "https://twitter.com/RustyVermeer"} "adam-james"]]]]])))
+    "<!DOCTYPE html>"
+    (h/html
+      (into [:head]
+            (concat
+              [[:meta {:charset "UTF-8"}]
+               [:meta {:name    "viewport"
+                       :content "width=device-width, initial-scale=1"}]
+               [:title "solenoid"]
+               [:style (slurp (io/resource "bootstrap.min.css"))]
+               [:script (slurp (io/resource "bootstrap.bundle.min.js"))]
+               [:style (slurp (io/resource "style.css"))]
+               [:script (slurp (io/resource "htmx.min.js"))]
+               [:script (slurp (io/resource "sse.js"))]]
+              head-entries))
+      [:body.d-flex.flex-column.h-100
+       {:data-bs-theme "dark"}
+       [:span {:class       "container-fluid"
+               :hx-ext      "sse"
+               :sse-connect "/events"}
+        [:div#reloader.row
+         {:hx-trigger "sse:reload"
+          :hx-get     "/reload"
+          :hx-target  "#reloader"}
+         (app-body)]]
+       [:footer.footer.mt-auto.py-3
+        [:h3.mt-4.text-center "solenoid"]
+        [:div.container
+         [:p "Created by "
+          [:a {:href "https://twitter.com/RustyVermeer"} "adam-james"]]]]])))
 
-(def routes
+;; PROBLEM: maybe this should use :keyword optional args?
+;; PROBLEM: & opts flow through fns should be cleaner than it is, I think
+;; PROBLEM: Clean up the routes by pulling fns out and using defn -> good for documentation/readability
+(defn routes
+  [& opts]
   [{:path     "/"
     :method   :get
     :response (fn [_]
                 {:status 200
-                 :body   (h/html (template))})}
+                 :body   (h/html (template (first opts)))})}
    {:path     "/action/:action/:id"
     :method   :post
-    :response (fn [{:keys [params]}]
-                (let [{:keys [id action]} params
-                      id                  (u/stringified-key->keyword id)
-                      action              (u/stringified-key->keyword action)
-                      control-ids         (get-in @c/registry [id :control-ids])]
-                  (case action
-                    :delete
-                    ;; dissoc all of the controls and the control-block in one go, causing only one :reload
-                    (swap! c/registry (fn [m] (apply (partial dissoc m) (conj control-ids id))))
+    :response
+    ;; PROBLEM: This could be reworked with defmethod to allow users to define custom actions
+    (fn [{:keys [params]}]
+      (let [{:keys [id action]} params
+            id                  (u/stringified-key->keyword id)
+            action              (u/stringified-key->keyword action)
+            control-ids         (get-in @c/registry [id :control-ids])]
+        (case action
+          :delete
+          ;; dissoc all of the controls and the control-block in one go, causing only one :reload
+          (swap! c/registry (fn [m] (apply (partial dissoc m) (conj control-ids id))))
 
-                    :def
-                    (let [state (get-in @c/registry [id :state])
-                          value (if state
-                                  @state
-                                  (get-in @c/registry [id :value]))]
-                      (intern 'user (symbol (name id)) value))
+          :def
+          (let [state (get-in @c/registry [id :state])
+                value (if state
+                        @state
+                        (get-in @c/registry [id :value]))]
+            (intern 'user (symbol (name id)) value))
 
-                    ;; no action
-                    (println "no action"))
-                  {:status 200
-                   :body   nil}))}
+          ;; no action
+          (println "no action"))
+        {:status 200
+         :body   nil}))}
    ;; hit when a control is altered in the UI. ID and value must always be available
    {:path     "/controller/:id"
     :method   :get
@@ -114,8 +122,9 @@
 
 ;; PROBLEM: this works perfectly EXCEPT it will only refresh the browser if its the last focused window?
 ;; PROBLEM: should use 'idiomorph' for merge swapping, which should help preserve focus and state better
-(def app
-  (-> #(ruuter/route routes %)
+(defn app
+  [& opts]
+  (-> #(ruuter/route (routes (first opts)) %)
       (sse-r/streaming-middleware
         sse-h/generate-stream
         {:request-matcher (fn [req] ((partial sse-r/uri-match "/events") req))
@@ -138,5 +147,5 @@
     (reset! server nil)))
 
 (defn serve!
-  ([] (serve! port))
-  ([port] (reset! server (srv/run-server #'app {:port port}))))
+  [& {:keys [port] :as opts}]
+  (reset! server (srv/run-server (#'app opts) {:port (or port 9876)})))
