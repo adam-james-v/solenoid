@@ -1,6 +1,5 @@
 (ns solenoid.utils
-  (:require [clojure.string :as str]
-            [cheshire.core :as json])
+  (:require [clojure.string :as str])
   (:import [java.net URLDecoder]))
 
 (defn parse-body [body]
@@ -10,30 +9,9 @@
       second
       URLDecoder/decode))
 
-(defn parse-query-string [query-string]
-  (when query-string
-    (-> query-string
-        (str/split #"=")
-        second)))
-
 (defn url-encoded-str->str
   [s]
   (URLDecoder/decode s))
-
-(defn maybe-parse-number
-  [s]
-  (if (string? s)
-    (or (parse-long s)
-        (parse-double s)
-        s)
-    s))
-
-(defn maybe-parse-boolean
-  [s]
-  (case s
-    "true" true
-    "false" false
-    s))
 
 (defn maybe-read-string
   [s]
