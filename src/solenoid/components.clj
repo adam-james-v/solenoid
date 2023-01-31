@@ -74,15 +74,20 @@
 (defmulti render-control-block-result (fn [control-block _] (-> control-block :state deref meta :result-type)))
 (defmulti render-control-block (fn [control-block] (-> control-block :state deref meta :control-block-type)))
 
+(defn render-control-block-result*
+  "Base implementation for result render methods, useful for creating custom `render-control-block-result` methods."
+  [{:keys [id]} result oob?]
+  [:div.text-center
+   (merge
+     {:id          (str (name id) "-result")
+      :class       "control-block-result"}
+     (when oob? {:hx-swap-oob "innerHTML"}))
+   (or result "no result")])
+
 (defmethod render-control-block-result :default
-  [{:keys [id state]} oob?]
+  [{:keys [state] :as control-block} oob?]
   (let [result @state]
-    [:div.text-center
-     (merge
-       {:id          (str (name id) "-result")
-        :class       "control-block-result"}
-       (when oob? {:hx-swap-oob "innerHTML"}))
-     (or result "no result")]))
+    (render-control-block-result* control-block result oob?)))
 
 (defn render-control-block*
   "Base implementation for control block render methods, useful for creating custom `render-control-block` methods."
