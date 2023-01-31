@@ -11,6 +11,10 @@
             [solenoid.components :as components]
             [solenoid.utils :as u]))
 
+(defmacro ^:private html
+  [options & content]
+  `(str (hiccup/html {:escape-strings? false} ~options ~@content)))
+
 (defn- app-body
   []
   [:section#app
@@ -34,7 +38,7 @@
   ([{:keys [head-entries]}]
    (list
      "<!DOCTYPE html>"
-     (hiccup/html
+     (html
        (into [:head]
              (concat
                [[:meta {:charset "UTF-8"}]
@@ -71,9 +75,9 @@
      :method   :get
      :response (fn [_]
                  {:status 200
-                  :body   (hiccup/html (template opts))})}
-    {:path     "/action/:action/:id"
-     :method   :post
+                  :body   (html (template opts))})}
+    {:path   "/action/:action/:id"
+     :method :post
      :response
      ;; PROBLEM: This could be reworked with defmethod to allow users to define custom actions
      (fn [{:keys [params]}]
@@ -110,17 +114,17 @@
                        block-id                              (when block-id (u/stringified-key->keyword block-id))]
                    (when value (swap! c/registry assoc-in [id :value] value))
                    {:status 200
-                    :body   (str (hiccup/html (if (= (keyword control-type) :edn) (str value) value))
+                    :body   (str (html (if (= (keyword control-type) :edn) (str value) value))
                                  (when block-id
-                                   (hiccup/html (components/render-control-block-result
-                                                  (get @c/registry block-id)
-                                                  true))))}))}
+                                   (html (components/render-control-block-result
+                                           (get @c/registry block-id)
+                                           true))))}))}
     ;; gets hit when you (reset! event :reload) on the backend
     {:path     "/reload"
      :method   :get
      :response (fn [_req]
                  {:status 200
-                  :body   (hiccup/html (app-body))})}]))
+                  :body   (html (app-body))})}]))
 
 ;; PROBLEM: this works perfectly EXCEPT it will only refresh the browser if its the last focused window?
 ;; PROBLEM: should use 'idiomorph' for merge swapping, which should help preserve focus and state better
