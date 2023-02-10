@@ -1,6 +1,6 @@
 # solenoid
 
-Solenoid implements a `letcontrols` let-style macro that allows you to wrap any code body in simple, live controls. It is a ligthweight tool you can reach for while playing with code at the repl.
+Solenoid implements a `letcontrols` let-style macro that allows you to wrap any code body in simple, live controls. It is a lightweight tool you can reach for while playing with code at the repl.t
 
 I think the utility of this library is best shown, rather than explained.
 
