@@ -111,14 +111,25 @@
                        value                                 (if (= :text (keyword control-type))
                                                                (u/get-string-value query-string)
                                                                value)
-                       block-id                              (when block-id (u/stringified-key->keyword block-id))]
+                       block-id                              (when block-id (u/stringified-key->keyword block-id))
+                       dependents                            (->> (get-in @c/registry [block-id :state]) u/get-watches)]
                    (when value (swap! c/registry assoc-in [id :value] value))
                    {:status 200
-                    :body   (str (html (if (= (keyword control-type) :edn) (str value) value))
-                                 (when block-id
-                                   (html (components/render-control-block-result
-                                           (get @c/registry block-id)
-                                           true))))}))}
+                    :body   (apply str
+                                   (concat
+                                     [;; render a controller
+                                      (html (if (= (keyword control-type) :edn) (str value) value))
+                                      ;; when rendering a block, they're updated with hx out-of-band true
+                                      (when block-id
+                                        (html (components/render-control-block-result
+                                                (get @c/registry block-id)
+                                                true)))]
+                                     ;; when there are dependent control blocks, send their results too
+                                     (when (seq dependents)
+                                       (for [[_ block-id] dependents]
+                                         (html (components/render-control-block-result
+                                                 (get @c/registry block-id)
+                                                 true))))))}))}
     ;; gets hit when you (reset! event :reload) on the backend
     {:path     "/reload"
      :method   :get

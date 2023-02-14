@@ -14,14 +14,19 @@
 (defmacro formula
   "Creates an atom that updates when its binding references update."
   [bindings & formula]
-  `(let ~bindings
-     (let [formula#   (atom ~@formula)
-           update-fn# (fn [key# ref# o# n#]
-                        (let [attempt# (try ~@formula (catch Exception _e# nil))]
-                          ;; the formula attempt must succeed, and the new value must not be nil
-                          ;; this lets the formula 'recover' if any driving refs cause invalid state
-                          (when (and (some? n#) (some? attempt#))
-                            (swap! formula# (fn [_#] ~@formula)))))]
-       (doseq [r# ~(vec (take-nth 2 bindings))]
-         (add-watch r# ~(keyword (str "update-formula-" (gensym))) update-fn#))
-       formula#)))
+  (let [l2 (take-last 2 bindings)
+        dependents (when (= (first l2) :dependents) (second l2))
+        bindings (if dependents (vec (drop-last 2 bindings)) bindings)]
+    `(let ~bindings
+       (let [formula#   (atom ~@formula)
+             update-fn# (fn [key# ref# o# n#]
+                          (let [attempt# (try ~@formula (catch Exception _e# nil))]
+                            ;; the formula attempt must succeed, and the new value must not be nil
+                            ;; this lets the formula 'recover' if any driving refs cause invalid state
+                            (when (and (some? n#) (some? attempt#))
+                              (swap! formula# (fn [_#] ~@formula)))))]
+         (doseq [r# ~(vec (take-nth 2 bindings))]
+           ;; adds a watch to each atom in the binding that is responsible for
+           ;; updating this formula whenever that atom changes.
+           (add-watch r# ~(vec (remove nil? [(keyword (str "update-formula-" (gensym))) dependents])) update-fn#))
+         formula#))))

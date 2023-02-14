@@ -162,13 +162,22 @@
 
     :else (make-edn-block {:value value})))
 
+
+(defn- get-derefs
+  [form]
+  (->> form
+       (tree-seq seqable? identity)
+       (filter seqable?)
+       (map (fn [[sym r]]
+              (when (or (= 'deref sym)
+                        (= 'clojure.core/deref sym))
+                r)))
+       (remove nil?)
+       vec))
+
 ;; PROBLEM: remove the 'eval' in there??
 ;; PROBLEM: if you macroexpand-1 this, it still side-effects (adds your bindings into the registry)
-;; I think there's a design problem here...
 
-;; what is this macro doing?
-;; 1. get the symbols used in the let-style binding passed in
-;; 2. generate a unique control-block keyword
 (defmacro letcontrols
   [bindings & body]
   (let [syms             (vec (take-nth 2 bindings))
@@ -180,14 +189,33 @@
                                 infer-control
                                 eval)
                               (take-nth 2 (rest bindings)))
-        cursor-bindings# (make-cursor-bindings (interleave syms controls))
-        deref-bindings#  (make-deref-bindings cursor-bindings#)]
+        derefs-in-body#  (get-derefs body)
+        ;; we ALSO want to include the derefs within the body of the letcontrols, so that watches are properly registsered to all
+        ;; refs that drive this block.
+        cursor-bindings# (vec (concat
+                                (make-cursor-bindings (interleave syms controls))
+                                (interleave derefs-in-body# derefs-in-body#)))
+        ;; deref-bindings builds up the derefs binding that sits inside the formula macro (creates a normal 'let')
+        ;; that is responsible for re-binding the user's symbols to the cursors that this macro builds.
+        ;; we remove any regular derefs that the user expects to behave normally inside the body, because
+        ;; those will be deref'd in the body already.
+        deref-bindings#  (make-deref-bindings (remove (set derefs-in-body#) cursor-bindings#))
+        ;; this cursor-bindings
+        cursor-bindings# (vec (concat
+                                cursor-bindings#
+                                (when (seq derefs-in-body#) [:dependents block-id#])))]
     `(let ~bindings
-       ;; create a formula with the agents linked to each control binding
+       ;; create a formula with the atoms linked to each control binding
        (-> (register!
-             (map->ControlBlock {:id          ~block-id#
-                                 :control-ids ~(mapv :id controls)
-                                 :state       (sm/formula ~cursor-bindings#
-                                                          (let ~deref-bindings#
-                                                            ~@body))}))
+             (map->ControlBlock
+               {:id          ~block-id#
+                :control-ids ~(mapv :id controls)
+                :state       (let [state# (sm/formula ~cursor-bindings#
+                                                      (let ~deref-bindings#
+                                                        ~@body))]
+                               ;; PROBLEM: need a better design for self-reporting the block ID that an atom has.
+                               ;; probably need to create a defrecord for letcontrols that define a stable map shape and
+                               ;; some useful getters/setters?
+                               #_(add-watch state# {:own-id ~block-id#} (fn [_# _# _# _#] nil))
+                               state#)}))
            :state))))
