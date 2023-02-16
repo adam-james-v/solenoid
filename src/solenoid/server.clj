@@ -1,7 +1,7 @@
 (ns solenoid.server
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
-            [hiccup2.core :as hiccup]
+            [hiccup.core :as hiccup :refer [html]]
             [org.httpkit.server :as srv]
             [ring-sse-middleware.core :as sse-r]
             [ring-sse-middleware.wrapper :as sse-w]
@@ -11,7 +11,7 @@
             [solenoid.components :as components]
             [solenoid.utils :as u]))
 
-(defmacro ^:private html
+#_(defmacro ^:private html
   [options & content]
   `(str (hiccup/html {:escape-strings? false} ~options ~@content)))
 

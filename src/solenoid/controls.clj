@@ -167,12 +167,13 @@
   [form]
   (->> form
        (tree-seq seqable? identity)
-       (filter seqable?)
+       (filter #(and (not (map? %)) (seqable? %)))
        (map (fn [[sym r]]
               (when (or (= 'deref sym)
                         (= 'clojure.core/deref sym))
                 r)))
        (remove nil?)
+       distinct
        vec))
 
 ;; PROBLEM: remove the 'eval' in there??
