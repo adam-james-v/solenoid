@@ -20,16 +20,24 @@
 
 
 (defn- make-hx-vals
-  [m get-value-js-str]
+  [m get-value-fn]
   (-> (str "js:" (json/generate-string (assoc m :value "____")))
-      (str/replace #"\"____\"" get-value-js-str)))
+      (str/replace #"\"____\"" (get-value-fn m))))
 
 ;; PROBLEM: make a mechanism that easily swaps :input :textearea, etc. to make the base-component more re-usable
 (def control-type->input-type
   {:slider "range"
    :num    "number"
    :text   "text"
-   :edn    "textarea"})
+   :toggle "checkbox"})
+
+(def control-type->form-key
+  {:slider :input
+   :num    :input
+   :text   :input
+   :toggle :input
+   :edn    :textarea
+   :point  :div})
 
 (defn- make-input-map
   [{:keys [id value control-type]}]
