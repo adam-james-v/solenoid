@@ -74,7 +74,6 @@
     (swap! registry assoc id (assoc this :value value))))
 
 ;; Controls to implement:
-;; - toggle
 ;; - radio group
 ;; - dropdown
 ;; - multi-select (checkbox group)
@@ -89,6 +88,15 @@
 (defn make-num [{:keys [value] :as m}]
   (let [default-values {:control-type :num}]
     (map->Num (merge default-values m {:value (or value 1)}))))
+
+(defrecord Toggle [control-type id value display-name]
+  Control
+  (validate [_ value]
+    (when (true? value) false)))
+
+(defn make-toggle [{:keys [value] :as m}]
+  (let [default-values {:control-type :toggle}]
+    (map->Toggle (merge default-values m {:value (boolean value)}))))
 
 (defrecord Slider [control-type id value min max step display-name]
   Control
@@ -125,11 +133,22 @@
   (let [default-values {:control-type :edn}]
     (map->EdnBlock (merge default-values m {:value (or value :default-value)}))))
 
+(defrecord Point [control-type id value display-name]
+  Control
+  (validate [_ value]
+    (maybe-read-string (str value))))
+
+(defn make-point [{:keys [value] :as m}]
+  (let [default-values {:control-type :point}]
+    (map->Point (merge default-values m {:value (or value [0 0])}))))
+
 (def control-key->control-fn
-  {:num make-num
+  {:num    make-num
    :slider make-slider
-   :text make-text
-   :edn make-edn-block})
+   :toggle make-toggle
+   :text   make-text
+   :point  make-point
+   :edn    make-edn-block})
 
 ;; PROBLEM: should these implement the Control Protocol?
 (defrecord Action [id text f])
@@ -156,12 +175,15 @@
              (contains? value :type)))
     ((control-key->control-fn (or (:type value) (:control-type value))) (dissoc value :type))
 
-    (ratio? value)  (make-num {:value (double value)})
-    (number? value) (make-num {:value value})
-    (string? value) (make-text  {:value value})
+    (ratio? value)               (make-num {:value (double value)})
+    (number? value)              (make-num {:value value})
+    (string? value)              (make-text  {:value value})
+    (boolean? value)             (make-toggle {:value value})
+    (and (vector? value)
+         (= (count value) 2)
+         (every? number? value)) (make-point {:value value})
 
     :else (make-edn-block {:value value})))
-
 
 (defn- get-derefs
   [form]

@@ -29,9 +29,11 @@
                             (str/includes? (name (:id %)) "controlblock"))
                        (vals @c/registry)))
          ;; render the control blocks in the registry
-         (mapv components/render-control-block
-               (filter #(str/includes? (name (:id %)) "controlblock")
-                       (vals @c/registry)))))]]])
+         (->> @c/registry
+              vals
+              (filter #(str/includes? (name (:id %)) "controlblock"))
+              (sort-by :id)
+              (mapv components/render-control-block))))]]])
 
 (defn- template
   ([] (template nil))
@@ -113,12 +115,14 @@
                                                                value)
                        block-id                              (when block-id (u/stringified-key->keyword block-id))
                        dependents                            (->> (get-in @c/registry [block-id :state]) u/get-watches)]
-                   (when value (swap! c/registry assoc-in [id :value] value))
+                   (when (not (nil? value)) (swap! c/registry assoc-in [id :value] value))
                    {:status 200
                     :body   (apply str
                                    (concat
                                      [;; render a controller
-                                      (html (if (= (keyword control-type) :edn) (str value) value))
+                                      (html (case (keyword control-type)
+                                              :point (components/render-point-value {:value value})
+                                              (str value)))
                                       ;; when rendering a block, they're updated with hx out-of-band true
                                       (when block-id
                                         (html (components/render-control-block-result

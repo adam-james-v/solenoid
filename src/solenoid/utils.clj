@@ -31,10 +31,13 @@
     (let [m (->> (str/split query-string #"[=&]")
                  (partition 2)
                  (mapv vec)
-                 (into {}))]
+                 (group-by first))]
       (-> m
-          (update-vals url-encoded-str->str)
-          (update-vals maybe-read-string)
+          (update-vals #(map second %))
+          (update-vals #(map url-encoded-str->str %))
+          (update-vals #(map maybe-read-string %))
+          (update-vals #(vec (replace {'NaN nil} %)))
+          (update-vals #(if (= (count %) 1) (first %) %))
           (update-keys keyword)))
     {}))
 

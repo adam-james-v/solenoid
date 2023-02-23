@@ -3,7 +3,7 @@
             [clojure.string :as str]
             [solenoid.utils :as u]
             [solenoid.controls :as c])
-  (:import [solenoid.controls Slider Num Text EdnBlock]))
+  (:import [solenoid.controls Slider Num Toggle Text EdnBlock Point]))
 
 (defn action-button
   [{:keys [id text]}]
@@ -41,35 +41,115 @@
    :hx-trigger "input"
    :hx-target  (str "#" (name id) "-value")})
 
+(def base-component-default-opts
+  {:get-value-fn                  (fn [control]
+                                    (str "document.getElementById('" (name (:id control)) "').value"))
+   :input-map-overrides           {}
+   :value-container-map-overrides {}})
+
 (defn base-component
-  ([control] (base-component control {} {}))
-  ([{:keys [id display-name value min max control-type] :as control}
-    input-map-overrides value-container-map-overrides]
-   (let [get-value-js-str (str "document.getElementById('" (name id) "').value")]
+  ([control]
+   (base-component control base-component-default-opts))
+  ([control opts]
+   (let [{:keys [id display-name value min max control-type]} control
+         {:keys [get-value-fn
+                 input-map-overrides
+                 value-container-map-overrides]} (merge base-component-default-opts opts)
+         form-key (control-type->form-key control-type)]
+     (intern 'user 'hx-vals (make-hx-vals control get-value-fn))
      [:div.control.row.my-1.mx-0.p-0
       [:span.col-3.text-end.mb-0.mt-2 (str (or display-name id))]
       [:span.col-7 {:class (str (name control-type) "-container")}
-       [:div.row.small
+       [:span.row.small
         (when min [:span.col-2.text-end.mb-0.mt-1 min])
-        [:input
+        [form-key
          (merge
            (make-input-map control)
-           {:hx-vals (make-hx-vals control get-value-js-str)}
+           {:hx-vals (make-hx-vals control get-value-fn)}
            control
-           input-map-overrides)]
+           input-map-overrides)
+         ;; if there's a form like a textarea, we need to insert the value within that tag so it shows up
+         (when (#{:textarea} form-key) (str value))]
         (when max [:span.col-2.mb-0.mt-1 max])]]
       [:span.col-2.mb-0.mt-1
        (merge
          {:id    (str (name id) "-value")
           :style {:display "none"}}
-         value-container-map-overrides) (str value)]])))
+         value-container-map-overrides) value]])))
 
-(defmulti render-controller type)
+(defmulti  render-controller type)
 (defmethod render-controller :default [m] (base-component m))
 (defmethod render-controller Num      [m] (base-component m))
 (defmethod render-controller Text     [m] (base-component m))
-(defmethod render-controller Slider   [m] (base-component m {} {:style {:display "inline-block"}}))
-(defmethod render-controller EdnBlock [m] (let [val (str (:value m))] (base-component (assoc m :value val))))
+(defmethod render-controller Toggle   [m]
+  (let [val (:value m)]
+    (base-component m {:input-map-overrides {:checked val}
+                       :get-value-fn (fn [control]
+                                       (str "document.getElementById('" (name (:id control)) "').checked"))})))
+
+(defmethod render-controller Slider [m]
+  (base-component m {:value-container-map-overrides
+                     {:style {:display "inline-block"}}}))
+
+(defmethod render-controller EdnBlock [m]
+  (let [val (str (:value m))]
+    (base-component (assoc m :value val))))
+
+(defn render-point-value
+  [m]
+  [:div {:style {:position "relative"
+                 :display  "flex"
+                 :left     (str (- (first (:value m)) 2) "px")
+                 :top      (str (- (second (:value m)) 2) "px")
+                 :margin-top "-2px"}}
+   [:div {:style {:width "4px" :height "4px" :border-radius "4px" :background "red"}}]
+   [:div {:style {:margin-top  "-0.45em !important"
+                  :margin-left "0.2em"
+                  :width       "auto"}} (str (:value m))]])
+
+(defmethod render-controller Point [control]
+  (let [val  (render-point-value control)
+        gvf  (fn [control]
+               (str
+                 "["
+                 "window.event.clientX" " - "
+                 "document.getElementById('" (name (:id control)) "').getBoundingClientRect().left" "\n,"
+                 "window.event.clientY" " - "
+                 "document.getElementById('" (name (:id control)) "').getBoundingClientRect().top"
+                 "]"))
+        imo  {:class      []
+              :hx-trigger :click
+              :style      {:width         "100px"
+                           :height        "100px"
+                           :padding       0
+                           :border-radius "4px"
+                           :background    "rgba(255,255,255,0.2)"
+                           :cursor        "crosshair"}}
+        vcmo {:style {:display  "block"
+                      :class    nil
+                      :position "absolute"}}
+
+        {:keys [id display-name control-type]} control
+        form-key                               (control-type->form-key control-type)]
+     [:div.control.row.my-1.mx-0.p-0
+      [:span.col-3.text-end.mb-0.mt-2 (str (or display-name id))]
+      [:span.col-7 {:class (str (name control-type) "-container")}
+       [:span.row.small
+        [form-key
+         (merge
+           (make-input-map control)
+           {:hx-vals (make-hx-vals control gvf)}
+           control imo)
+         [:span.col-2.mb-0.mt-1
+          (merge
+            {:id    (str (name id) "-value")
+             :style {:display "none"}}
+            vcmo) val]]]]])
+    #_(base-component
+      (assoc m :value val)
+      {:input-map-overrides           imo
+       :get-value-fn                  gvf
+       :value-container-map-overrides vcmo}))
 
 (defmulti render-control-block-result (fn [control-block _] (-> control-block :state deref meta :result-type)))
 (defmulti render-control-block (fn [control-block] (-> control-block :state deref meta :control-block-type)))
@@ -109,26 +189,6 @@
   (render-control-block*
     control-block
     (render-control-block-result control-block false)))
-
-#_(defn toggle
-  [{:keys [id value] :as val-map}]
-  [:div
-   [:span (str id "  ")]
-   [:span.togglecontainer
-    [(keyword (str "input#" (name id) ".toggle"))
-     (merge
-       {:type      "toggle"
-        :checked   (u/maybe-parse-boolean value)
-        :hx-get    (str "/controller/" id)
-        :hx-target (str "#" (name id) "-value")
-        :hx-vals   (str "js:{"
-                        "value: document.getElementById('" (name id) "').checked, "
-                        "type: 'toggle', " "}")}
-       val-map)]
-    [(keyword (str "div#" (name id) "-value"))
-     {:style {:display "none"}}
-     value]]])
-
 
 #_(defn dropdown
   [{:keys [id value options] :as val-map}]
@@ -199,3 +259,21 @@
     [(keyword (str "div#" (name id) "-value"))
      {:style {:display "none"}}
      value]]])
+
+
+;; REDESIGN?:
+;; controls need a re-design I think. Each control added needs:
+
+;; - define a record in controls
+;; - define a validator in the record in controls
+;; - define a maker-fn in controls
+;; - define a conditional for inferring the controls from some input in controls
+;; - add entry in control-key->control-fn map in controls
+
+;; - import the control class into components
+;; - add entry to control-type->form-key
+;; - add entry to control-type->input-type IF using :input
+;; - define a render-controller method in components
+
+;; - know if your render-controller needs a render-controller-value fn
+;; - add a case for control-type keys in the controller/:id server response IF special case is needed
