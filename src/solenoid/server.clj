@@ -1,7 +1,7 @@
 (ns solenoid.server
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
-            [hiccup2.core :as hiccup]
+            [hiccup.core :as hiccup :refer [html]]
             [org.httpkit.server :as srv]
             [ring-sse-middleware.core :as sse-r]
             [ring-sse-middleware.wrapper :as sse-w]
@@ -11,7 +11,7 @@
             [solenoid.components :as components]
             [solenoid.utils :as u]))
 
-(defmacro ^:private html
+#_(defmacro ^:private html
   [options & content]
   `(str (hiccup/html {:escape-strings? false} ~options ~@content)))
 
@@ -21,7 +21,7 @@
    [:main
     [:div.container
      (into
-       [:div.row.row-cols-1.row-cols-sm-1.row-cols-md-2.row-cols-lg-3.row-cols-xl-4.g-2]
+       [:div.row.row-cols-1.row-cols-sm-1.row-cols-md-2.row-cols-lg-3.g-2]
        (concat
          ;; render any controllers not associated with control blocks (can do this by using c/cursor directly)
          (mapv components/render-controller
@@ -29,9 +29,11 @@
                             (str/includes? (name (:id %)) "controlblock"))
                        (vals @c/registry)))
          ;; render the control blocks in the registry
-         (mapv components/render-control-block
-               (filter #(str/includes? (name (:id %)) "controlblock")
-                       (vals @c/registry)))))]]])
+         (->> @c/registry
+              vals
+              (filter #(str/includes? (name (:id %)) "controlblock"))
+              (sort-by :id)
+              (mapv components/render-control-block))))]]])
 
 (defn- template
   ([] (template nil))
@@ -66,6 +68,22 @@
          [:div.container
           [:p "Created by "
            [:a {:href "https://twitter.com/RustyVermeer"} "adam-james"]]]]]))))
+
+(defn- get-dependents
+  [block-id]
+  (->> (get-in @c/registry [block-id :state])
+       u/get-watches
+       (map last)
+       (remove nil?)
+       (filter #(str/starts-with? (name %) "controlblock"))))
+
+(defn- get-nested-dependents
+  [block-id]
+  (let [ifn   (fn [ids] (mapcat get-dependents ids))
+        iters (take 20 (take-while seq (iterate ifn [block-id])))]
+    (->> iters
+         (apply concat)
+         distinct)))
 
 ;; PROBLEM: Clean up the routes by pulling fns out and using defn -> good for documentation/readability
 (defn- routes
@@ -111,14 +129,27 @@
                        value                                 (if (= :text (keyword control-type))
                                                                (u/get-string-value query-string)
                                                                value)
-                       block-id                              (when block-id (u/stringified-key->keyword block-id))]
-                   (when value (swap! c/registry assoc-in [id :value] value))
+                       block-id                              (when block-id (u/stringified-key->keyword block-id))
+                       dependents                            (get-nested-dependents block-id)]
+                   (when (not (nil? value)) (swap! c/registry assoc-in [id :value] value))
                    {:status 200
-                    :body   (str (html (if (= (keyword control-type) :edn) (str value) value))
-                                 (when block-id
-                                   (html (components/render-control-block-result
-                                           (get @c/registry block-id)
-                                           true))))}))}
+                    :body   (apply str
+                                   (concat
+                                     [;; render a controller
+                                      (html (case (keyword control-type)
+                                              :point (components/render-point-value {:value value})
+                                              (str value)))
+                                      ;; when rendering a block, they're updated with hx out-of-band true
+                                      (when block-id
+                                        (html (components/render-control-block-result
+                                                (get @c/registry block-id)
+                                                true)))]
+                                     ;; when there are dependent control blocks, send their results too
+                                     (when (seq dependents)
+                                       (for [block-id dependents]
+                                         (html (components/render-control-block-result
+                                                 (get @c/registry block-id)
+                                                 true))))))}))}
     ;; gets hit when you (reset! event :reload) on the backend
     {:path     "/reload"
      :method   :get
