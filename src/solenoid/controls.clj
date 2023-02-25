@@ -223,18 +223,19 @@
                                 infer-control
                                 eval)
                               (take-nth 2 (rest bindings)))
+        ;; Get any derefs that are within the body of the letcontrols
         derefs-in-body#  (get-derefs body)
-        ;; we ALSO want to include the derefs within the body of the letcontrols, so that watches are properly registsered to all
-        ;; refs that drive this block.
+        ;; Add these derefs so that watches are properly registsered to all refs that drive this block.
         cursor-bindings# (vec (concat
                                 (make-cursor-bindings (interleave syms controls))
                                 (interleave derefs-in-body# derefs-in-body#)))
-        ;; deref-bindings builds up the derefs binding that sits inside the formula macro (creates a normal 'let')
-        ;; that is responsible for re-binding the user's symbols to the cursors that this macro builds.
-        ;; we remove any regular derefs that the user expects to behave normally inside the body, because
-        ;; those will be deref'd in the body already.
+        ;; `make-deref-bindings` builds up the let binding vector
+        ;; for the regular let that sits inside the formula macro.
+        ;; That let form is needed for re-binding the user's symbols to the cursors for each control.
+        ;; we remove the derefs-in-body because those will have been de-referenced in the body already.
         deref-bindings#  (make-deref-bindings (remove (set derefs-in-body#) cursor-bindings#))
-        ;; this cursor-bindings
+        ;; cursor-bindings will add the optional :dependents key with this block's ID
+        ;; so that watches can be added properly to all refs used in the body. See `solenoid.macros/formula`.
         cursor-bindings# (vec (concat
                                 cursor-bindings#
                                 (when (seq derefs-in-body#) [:dependents block-id#])))]
@@ -247,9 +248,5 @@
                 :state       (let [state# (sm/formula ~cursor-bindings#
                                                       (let ~deref-bindings#
                                                         ~@body))]
-                               ;; PROBLEM: need a better design for self-reporting the block ID that an atom has.
-                               ;; probably need to create a defrecord for letcontrols that define a stable map shape and
-                               ;; some useful getters/setters?
-                               #_(add-watch state# {:own-id ~block-id#} (fn [_# _# _# _#] nil))
                                state#)}))
            :state))))
