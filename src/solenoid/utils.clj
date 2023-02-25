@@ -48,5 +48,5 @@
 ;; https://stackoverflow.com/a/12814087
 (defn get-watches
   "Returns list of keys corresponding to watchers of the reference."
-  [^clojure.lang.IRef reference]
+  [reference]
   (keys (.getWatches reference)))
