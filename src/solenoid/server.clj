@@ -21,7 +21,7 @@
    [:main
     [:div.container
      (into
-       [:div.row.row-cols-1.row-cols-sm-1.row-cols-md-2.row-cols-lg-3.row-cols-xl-4.g-2]
+       [:div.row.row-cols-1.row-cols-sm-1.row-cols-md-2.row-cols-lg-3.g-2]
        (concat
          ;; render any controllers not associated with control blocks (can do this by using c/cursor directly)
          (mapv components/render-controller

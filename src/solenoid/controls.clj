@@ -16,10 +16,21 @@
     ;; when controllers are removed, remove any watches associated with affected cursor paths
     (let [removed (set/difference (set (keys old)) (set (keys new)))]
       (when (seq removed)
-        (let [watches (u/get-watches registry)
-              paths   (mapcat #(filter (fn [k]
-                                         (and (vector? k)
-                                              (= (first k) %))) watches) removed)]
+        (let [cb-watches (->> (keys new)
+                              (filter #(str/starts-with? (name %) "controlblock"))
+                              (mapcat #(u/get-watches (get-in new [% :state])))
+                              (filter #(removed (last %))))
+              watches    (u/get-watches registry)
+              paths      (mapcat #(filter (fn [k]
+                                            (and (vector? k)
+                                                 (= (first k) %))) watches) removed)]
+          ;; any removed control blocks might have been dependents of a still-existing block.
+          ;; In such cases, old watches on still-existing blocks must be removed so that we don't get any NPEs
+          (when (seq cb-watches)
+            (doseq [cb (keys new)
+                    w cb-watches]
+              (swap! registry update-in [cb :state] (fn [ref]
+                                                      (when ref (remove-watch ref w))))))
           (when (seq paths)
             (doseq [path paths]
               (remove-watch registry path))))))))
