@@ -69,6 +69,22 @@
           [:p "Created by "
            [:a {:href "https://twitter.com/RustyVermeer"} "adam-james"]]]]]))))
 
+(defn- get-dependents
+  [block-id]
+  (->> (get-in @c/registry [block-id :state])
+       u/get-watches
+       (map last)
+       (remove nil?)
+       (filter #(str/starts-with? (name %) "controlblock"))))
+
+(defn- get-nested-dependents
+  [block-id]
+  (let [ifn   (fn [ids] (mapcat get-dependents ids))
+        iters (take 20 (take-while seq (iterate ifn [block-id])))]
+    (->> iters
+         (apply concat)
+         distinct)))
+
 ;; PROBLEM: Clean up the routes by pulling fns out and using defn -> good for documentation/readability
 (defn- routes
   ([] (routes nil))
@@ -114,7 +130,7 @@
                                                                (u/get-string-value query-string)
                                                                value)
                        block-id                              (when block-id (u/stringified-key->keyword block-id))
-                       dependents                            (->> (get-in @c/registry [block-id :state]) u/get-watches)]
+                       dependents                            (get-nested-dependents block-id)]
                    (when (not (nil? value)) (swap! c/registry assoc-in [id :value] value))
                    {:status 200
                     :body   (apply str
@@ -130,7 +146,7 @@
                                                 true)))]
                                      ;; when there are dependent control blocks, send their results too
                                      (when (seq dependents)
-                                       (for [[_ block-id] dependents]
+                                       (for [block-id dependents]
                                          (html (components/render-control-block-result
                                                  (get @c/registry block-id)
                                                  true))))))}))}
