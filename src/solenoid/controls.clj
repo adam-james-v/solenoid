@@ -16,10 +16,21 @@
     ;; when controllers are removed, remove any watches associated with affected cursor paths
     (let [removed (set/difference (set (keys old)) (set (keys new)))]
       (when (seq removed)
-        (let [watches (u/get-watches registry)
-              paths   (mapcat #(filter (fn [k]
-                                         (and (vector? k)
-                                              (= (first k) %))) watches) removed)]
+        (let [cb-watches (->> (keys new)
+                              (filter #(str/starts-with? (name %) "controlblock"))
+                              (mapcat #(u/get-watches (get-in new [% :state])))
+                              (filter #(removed (last %))))
+              watches    (u/get-watches registry)
+              paths      (mapcat #(filter (fn [k]
+                                            (and (vector? k)
+                                                 (= (first k) %))) watches) removed)]
+          ;; any removed control blocks might have been dependents of a still-existing block.
+          ;; In such cases, old watches on still-existing blocks must be removed so that we don't get any NPEs
+          (when (seq cb-watches)
+            (doseq [cb (keys new)
+                    w cb-watches]
+              (swap! registry update-in [cb :state] (fn [ref]
+                                                      (when ref (remove-watch ref w))))))
           (when (seq paths)
             (doseq [path paths]
               (remove-watch registry path))))))))
@@ -74,7 +85,6 @@
     (swap! registry assoc id (assoc this :value value))))
 
 ;; Controls to implement:
-;; - toggle
 ;; - radio group
 ;; - dropdown
 ;; - multi-select (checkbox group)
@@ -89,6 +99,15 @@
 (defn make-num [{:keys [value] :as m}]
   (let [default-values {:control-type :num}]
     (map->Num (merge default-values m {:value (or value 1)}))))
+
+(defrecord Toggle [control-type id value display-name]
+  Control
+  (validate [_ value]
+    (when (true? value) false)))
+
+(defn make-toggle [{:keys [value] :as m}]
+  (let [default-values {:control-type :toggle}]
+    (map->Toggle (merge default-values m {:value (boolean value)}))))
 
 (defrecord Slider [control-type id value min max step display-name]
   Control
@@ -125,11 +144,22 @@
   (let [default-values {:control-type :edn}]
     (map->EdnBlock (merge default-values m {:value (or value :default-value)}))))
 
+(defrecord Point [control-type id value display-name]
+  Control
+  (validate [_ value]
+    (maybe-read-string (str value))))
+
+(defn make-point [{:keys [value] :as m}]
+  (let [default-values {:control-type :point}]
+    (map->Point (merge default-values m {:value (or value [0 0])}))))
+
 (def control-key->control-fn
-  {:num make-num
+  {:num    make-num
    :slider make-slider
-   :text make-text
-   :edn make-edn-block})
+   :toggle make-toggle
+   :text   make-text
+   :point  make-point
+   :edn    make-edn-block})
 
 ;; PROBLEM: should these implement the Control Protocol?
 (defrecord Action [id text f])
@@ -156,19 +186,32 @@
              (contains? value :type)))
     ((control-key->control-fn (or (:type value) (:control-type value))) (dissoc value :type))
 
-    (ratio? value)  (make-num {:value (double value)})
-    (number? value) (make-num {:value value})
-    (string? value) (make-text  {:value value})
+    (ratio? value)               (make-num {:value (double value)})
+    (number? value)              (make-num {:value value})
+    (string? value)              (make-text  {:value value})
+    (boolean? value)             (make-toggle {:value value})
+    (and (vector? value)
+         (= (count value) 2)
+         (every? number? value)) (make-point {:value value})
 
     :else (make-edn-block {:value value})))
 
+(defn- get-derefs
+  [form]
+  (->> form
+       (tree-seq seqable? identity)
+       (filter #(and (not (map? %)) (seqable? %)))
+       (map (fn [[sym r]]
+              (when (or (= 'deref sym)
+                        (= 'clojure.core/deref sym))
+                r)))
+       (remove nil?)
+       distinct
+       vec))
+
 ;; PROBLEM: remove the 'eval' in there??
 ;; PROBLEM: if you macroexpand-1 this, it still side-effects (adds your bindings into the registry)
-;; I think there's a design problem here...
 
-;; what is this macro doing?
-;; 1. get the symbols used in the let-style binding passed in
-;; 2. generate a unique control-block keyword
 (defmacro letcontrols
   [bindings & body]
   (let [syms             (vec (take-nth 2 bindings))
@@ -180,14 +223,30 @@
                                 infer-control
                                 eval)
                               (take-nth 2 (rest bindings)))
-        cursor-bindings# (make-cursor-bindings (interleave syms controls))
-        deref-bindings#  (make-deref-bindings cursor-bindings#)]
+        ;; Get any derefs that are within the body of the letcontrols
+        derefs-in-body#  (get-derefs body)
+        ;; Add these derefs so that watches are properly registsered to all refs that drive this block.
+        cursor-bindings# (vec (concat
+                                (make-cursor-bindings (interleave syms controls))
+                                (interleave derefs-in-body# derefs-in-body#)))
+        ;; `make-deref-bindings` builds up the let binding vector
+        ;; for the regular let that sits inside the formula macro.
+        ;; That let form is needed for re-binding the user's symbols to the cursors for each control.
+        ;; we remove the derefs-in-body because those will have been de-referenced in the body already.
+        deref-bindings#  (make-deref-bindings (remove (set derefs-in-body#) cursor-bindings#))
+        ;; cursor-bindings will add the optional :dependents key with this block's ID
+        ;; so that watches can be added properly to all refs used in the body. See `solenoid.macros/formula`.
+        cursor-bindings# (vec (concat
+                                cursor-bindings#
+                                (when (seq derefs-in-body#) [:dependents block-id#])))]
     `(let ~bindings
-       ;; create a formula with the agents linked to each control binding
+       ;; create a formula with the atoms linked to each control binding
        (-> (register!
-             (map->ControlBlock {:id          ~block-id#
-                                 :control-ids ~(mapv :id controls)
-                                 :state       (sm/formula ~cursor-bindings#
-                                                          (let ~deref-bindings#
-                                                            ~@body))}))
+             (map->ControlBlock
+               {:id          ~block-id#
+                :control-ids ~(mapv :id controls)
+                :state       (let [state# (sm/formula ~cursor-bindings#
+                                                      (let ~deref-bindings#
+                                                        ~@body))]
+                               state#)}))
            :state))))
