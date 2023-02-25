@@ -1,7 +1,6 @@
 (ns solenoid.components
   (:require [cheshire.core :as json]
             [clojure.string :as str]
-            [solenoid.utils :as u]
             [solenoid.controls :as c])
   (:import [solenoid.controls Slider Num Toggle Text EdnBlock Point]))
 
@@ -12,26 +11,18 @@
     :hx-swap "none"}
    (or text id)])
 
-;; PROBLEM: make the components take in the exact shape of the record, nothing more
-;; PROBLEM: make the components return the exact shape of the record, with updated value
-;;          do this by having some to/from json fns that jsonify the control record coming in,
-;;          and a fn that properly builds the hx-vals 'map'
-;; PROBLEM: de-dupe the structure of the controls renderers a bit (eg. controls-key/id/class controls-val-key/id/class etc.)
-
-
 (defn- make-hx-vals
   [m get-value-fn]
   (-> (str "js:" (json/generate-string (assoc m :value "____")))
       (str/replace #"\"____\"" (get-value-fn m))))
 
-;; PROBLEM: make a mechanism that easily swaps :input :textearea, etc. to make the base-component more re-usable
-(def control-type->input-type
+(def ^:private control-type->input-type
   {:slider "range"
    :num    "number"
    :text   "text"
    :toggle "checkbox"})
 
-(def control-type->form-key
+(def ^:private control-type->form-key
   {:slider :input
    :num    :input
    :text   :input
@@ -49,11 +40,12 @@
    :hx-trigger "input"
    :hx-target  (str "#" (name id) "-value")})
 
-(def base-component-default-opts
-  {:get-value-fn                  (fn [control]
-                                    (str "document.getElementById('" (name (:id control)) "').value"))
-   :input-map-overrides           {}
-   :value-container-map-overrides {}})
+(def ^:private base-component-default-opts
+  {:input-map-overrides           {}
+   :value-container-map-overrides {}
+   :get-value-fn
+   (fn [control]
+     (str "document.getElementById('" (name (:id control)) "').value"))})
 
 (defn base-component
   ([control]
@@ -116,26 +108,23 @@
                   :width       "auto"}} (str (:value m))]])
 
 (defmethod render-controller Point [control]
-  (let [val  (render-point-value control)
-        gvf  (fn [control]
-               (str
-                 "["
-                 "window.event.clientX" " - "
-                 "document.getElementById('" (name (:id control)) "').getBoundingClientRect().left" "\n,"
-                 "window.event.clientY" " - "
-                 "document.getElementById('" (name (:id control)) "').getBoundingClientRect().top"
-                 "]"))
-        imo  {:class      []
-              :hx-trigger :click
-              :style      {:width         "100px"
-                           :height        "100px"
-                           :padding       0
-                           :border-radius "4px"
-                           :background    "rgba(255,255,255,0.2)"
-                           :cursor        "crosshair"}}
-        vcmo {:style {:display  "block"
-                      :class    nil
-                      :position "absolute"}}
+  (let [val (render-point-value control)
+        gvf (fn [control]
+              (str
+                "["
+                "window.event.clientX" " - "
+                "document.getElementById('" (name (:id control)) "').getBoundingClientRect().left" "\n,"
+                "window.event.clientY" " - "
+                "document.getElementById('" (name (:id control)) "').getBoundingClientRect().top"
+                "]"))
+        imo {:class      []
+             :hx-trigger :click
+             :style      {:width         "100px"
+                          :height        "100px"
+                          :padding       0
+                          :border-radius "4px"
+                          :background    "rgba(255,255,255,0.2)"
+                          :cursor        "crosshair"}}
 
         {:keys [id display-name control-type]} control
         form-key                               (control-type->form-key control-type)]
@@ -147,20 +136,21 @@
          (merge
            (make-input-map control)
            {:hx-vals (make-hx-vals control gvf)}
-           control imo)
+           control
+           imo)
          [:span.col-2.mb-0.mt-1
-          (merge
-            {:id    (str (name id) "-value")
-             :style {:display "none"}}
-            vcmo) val]]]]])
-    #_(base-component
-      (assoc m :value val)
-      {:input-map-overrides           imo
-       :get-value-fn                  gvf
-       :value-container-map-overrides vcmo}))
+          {:id    (str (name id) "-value")
+           :style {:display  "block"
+                   :class    nil
+                   :position "absolute"}} val]]]]]))
 
-(defmulti render-control-block-result (fn [control-block _] (-> control-block :state deref meta :result-type)))
-(defmulti render-control-block (fn [control-block] (-> control-block :state deref meta :control-block-type)))
+(defmulti render-control-block-result
+  (fn [control-block _]
+    (-> control-block :state deref meta :result-type)))
+
+(defmulti render-control-block
+  (fn [control-block]
+    (-> control-block :state deref meta :control-block-type)))
 
 (defmethod render-control-block-result :default
   [{:keys [id state]} oob?]
@@ -268,8 +258,8 @@
      {:style {:display "none"}}
      value]]])
 
-
-;; REDESIGN?:
+;; PROBLEM
+;; It might be good to REDESIGN:
 ;; controls need a re-design I think. Each control added needs:
 
 ;; - define a record in controls
