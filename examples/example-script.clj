@@ -2,7 +2,7 @@
 (require '[babashka.deps :as deps])
 (deps/add-deps
   '{:deps {adam-james-v/solenoid {:git/url "https://github.com/adam-james-v/solenoid/"
-                                  :sha "a79450017ab044058d630485599da7ce42a109fe"}}})
+                                  :sha "60476f567627c1b499acffac54a39133735d2b59"}}})
 
 (ns solenoid.example
   (:require [clojure.string :as str]
