@@ -1,6 +1,9 @@
 (ns custom-control-block-render-example
-  (:require [solenoid.controls :as c]
+  (:require [solenoid.server :as ss]
+            [solenoid.controls :as c]
             [solenoid.components :as components]))
+
+(ss/serve! {:port 9876})
 
 (comment
   ;; What can you do if you want to render your data in a nice way?

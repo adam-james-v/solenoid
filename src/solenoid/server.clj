@@ -9,11 +9,8 @@
             [ruuter.core :as ruuter]
             [solenoid.controls :as c]
             [solenoid.components :as components]
-            [solenoid.utils :as u]))
-
-#_(defmacro ^:private html
-  [options & content]
-  `(str (hiccup/html {:escape-strings? false} ~options ~@content)))
+            [solenoid.utils :as u])
+    (:import (java.net ServerSocket BindException)))
 
 (defn- app-body
   []
@@ -130,12 +127,12 @@
                                                                (u/get-string-value query-string)
                                                                value)
                        block-id                              (when block-id (u/stringified-key->keyword block-id))
-                       dependents                            (get-nested-dependents block-id)]
+                       dependents                            (remove #{block-id} (get-nested-dependents block-id))]
                    (when (not (nil? value)) (swap! c/registry assoc-in [id :value] value))
                    {:status 200
                     :body   (apply str
                                    (concat
-                                     [;; render a controller
+                                     [ ;; render a controller
                                       (html (case (keyword control-type)
                                               :point (components/render-point-value {:value value})
                                               (str value)))
@@ -183,6 +180,32 @@
     (@server :timeout 100)
     (reset! server nil)))
 
+;; https://github.com/prestancedesign/get-port/blob/main/src/prestancedesign/get_port.clj
+(defn- get-available-port
+  "Return a random available TCP port in allowed range (between 1024 and 65535) or a specified one"
+  ([] (get-available-port 0))
+  ([port]
+   (with-open [socket (ServerSocket. port)]
+     (.getLocalPort socket))))
+
+(defn get-port
+  "Get an available TCP port according to the supplied options.
+  - A preferred port: (get-port {:port 3000})
+  - A vector of preferred ports: (get-port {:port [3000 3004 3010]})
+  - Use the `make-range` helper in case you need a port in a certain (inclusive) range: (get-port {:port (make-range 3000 3005)})
+  No args return a random available port"
+  ([] (get-available-port))
+  ([opts]
+   (loop [port (:port opts)]
+     (let [result
+           (try
+             (get-available-port (if (number? port) port (first port)))
+             (catch Exception e (instance? BindException (.getCause e))))]
+       (or result (recur (if (number? port) 0 (next port))))))))
+
 (defn serve!
   [& {:keys [port] :as opts}]
-  (reset! server (srv/run-server (#'app opts) {:port (or port 9876)})))
+  (stop-server)
+  (let [available-port (get-port {:port (concat [(or port 9876)] (range 8000 9000))})]
+    (reset! server (srv/run-server (#'app opts) {:port available-port}))
+    (println "Server started on Port: " available-port)))
