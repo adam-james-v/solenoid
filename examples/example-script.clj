@@ -1,10 +1,22 @@
-#!/usr/bin/env bb
-(require '[babashka.deps :as deps])
-(deps/add-deps
-  '{:deps {adam-james-v/solenoid {:git/url "https://github.com/adam-james-v/solenoid/"
-                                  :sha "60476f567627c1b499acffac54a39133735d2b59"}}})
+#?@(:bb
+  [#!/usr/bin/env bb
+   (require '[babashka.deps :as deps])
+   (deps/add-deps
+     '{:deps {adam-james-v/solenoid {:git/url "https://github.com/adam-james-v/solenoid/"
+                                     :sha "85ce76eadefdc3793d59a40e031b1eb5cc99942c"}}})
 
-(ns solenoid.example
+   (let [[major minor patch] (->> (clojure.string/split (System/getProperty "babashka.version") #"\.")
+                                  (map parse-long))]
+     (when-not (and (>= major 1)
+                    (>= minor 2)
+                    (>= patch 174))
+       (do (println
+             (format "Your Babashka Version is : %s, but version 1.2.174 Or Newer is required."
+                     (System/getProperty "babashka.version"))
+             "This is the case because Solenoid relies on atom's .getWatch, which is provided in Babashka 1.2.174.")
+           (System/exit 1))))])
+
+(ns solenoid.example-script
   (:require [clojure.string :as str]
             [solenoid.server :as ss]
             [solenoid.controls :as c]))
