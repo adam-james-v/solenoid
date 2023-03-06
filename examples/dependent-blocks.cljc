@@ -349,23 +349,6 @@
        (interpose " ")
        (apply str)))
 
-;; <Extrusion
-;; beginCap='true'
-;; ccw='true'
-;; convex='true'
-;; creaseAngle='0'
-;; crossSection='[(1,1), (1, -1), (-1, -1), (-1, 1), (1, 1)]'
-;; endCap='true'
-;; height='0'
-;; lit='true'
-;; metadata='X3DMetadataObject'
-;; orientation='[(0,0,0,1)]'
-;; scale='[(1,1)]'
-;; solid='true'
-;; spine='[(0,0,0)]'
-;; useGeoCache='true' ></Extrusion>
-
-
 ;; This is the first dependent block!
 ;; Inside the body, we grab pts-a with `(-> @pts-a meta :pts reverse)`, and pts-b similarly.
 ;; The macro finds those derefs and connects our block's result rendering to changes in
@@ -438,10 +421,10 @@
 
 (def control-point-params
   (c/letcontrols
-    [t1 {:display-name "T1" :type :slider :value 0 :min 0 :max 1 :step 0.0001}
-     t2 {:display-name "T2" :type :slider :value 0 :min 0 :max 1 :step 0.0001}
-     t3 {:display-name "T3" :type :slider :value 0 :min 0 :max 1 :step 0.0001}
-     t4 {:display-name "T4" :type :slider :value 0 :min 0 :max 1 :step 0.0001}]
+    [t1 {:display-name "T1" :type :slider :value 0.115 :min 0 :max 1 :step 0.001}
+     t2 {:display-name "T2" :type :slider :value 0.252 :min 0 :max 1 :step 0.001}
+     t3 {:display-name "T3" :type :slider :value 0.735 :min 0 :max 1 :step 0.001}
+     t4 {:display-name "T4" :type :slider :value 0.130 :min 0 :max 1 :step 0.001}]
     (let [{:keys [r1 r2 r3 r4 h1 h2 h3 h4]} (-> @control-circle-params meta :data)
           add-h (fn [c h]
                   (fn [t]
@@ -491,9 +474,9 @@
   (c/letcontrols
     [steps {:display-name "STEPS" :type :num :value 30 :min 10 :max 200 :step 1}
      t1 {:display-name "T1" :type :slider :value 0 :min 0 :max 1 :step 0.0001}
-     sc {:display-name "SCALE" :type :slider :value 0.001 :min 1 :max 10 :step 0.001}
-     sp {:display-name "SPREAD" :type :slider :value 1 :min 0.001 :max 10 :step 0.001}
-     t4 {:display-name "T4" :type :slider :value 0 :min 0 :max 1 :step 0.0001}]
+     sc {:display-name "SCALE" :type :slider :value 0.001 :min 1 :max 10 :step 0.0001}
+     sp {:display-name "SPREAD" :type :slider :value 1 :min 0.001 :max 10 :step 0.0001}
+     t4 {:display-name "T4" :type :slider :value 1 :min 0 :max 1 :step 0.001}]
     (let [c       (bezier (-> @control-point-params meta :control-pts)) ;; parametric curve from the bezier points
           ts      (range 0 1 (double (/ 1 (or steps 10))))
           ts      (if (< (apply max ts) 1)
