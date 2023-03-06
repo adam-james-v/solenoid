@@ -1,6 +1,6 @@
 # solenoid
 
-Solenoid implements a `letcontrols` let-style macro that allows you to wrap any code body in simple, live controls. It is a lightweight tool you can reach for while playing with code at the repl.t
+Solenoid implements a `letcontrols` let-style macro that allows you to wrap any code body in simple, live controls. It is a lightweight tool you can reach for while playing with code at the repl.
 
 I think the utility of this library is best shown, rather than explained.
 
@@ -11,7 +11,7 @@ Here's a simple example to start with:
   (:require [solenoid.controls :as c]
             [solenoid.server :as ss]))
 
-(ss/serve!) ;; webpage served on port 9876
+(ss/serve!) ;; webpage served on port 9876, or lowest available port starting at 8000.
 
 (def example-1
   (c/letcontrols
