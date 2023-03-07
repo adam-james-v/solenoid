@@ -4,7 +4,11 @@ Solenoid implements a `letcontrols` let-style macro that allows you to wrap any 
 
 I think the utility of this library is best shown, rather than explained.
 
-Here's a simple example to start with:
+Here's a cool showcase:
+
+https://user-images.githubusercontent.com/21064735/223320630-cd15ad31-65bb-4995-8b79-6383db36f202.mp4
+
+Here's a simple copy-pastable example:
 
 ```clojure
 (ns pencil.scratch
@@ -75,8 +79,10 @@ Which eliminates all control blocks and controls. If you know exactly which keys
 
 I find that if I'm playing around in a repl anyway, it's not usually too devastating to wipe the registry to make sure everything's clean, but do what you wish!
 
-## Fun Example
-Here's a fun example that works as a Babashka script. (Requires version `1.0.170`).
+## Fun Examples
+You can check out some examples in the [examples directory](https://github.com/adam-james-v/solenoid/tree/main/examples), but I've pasted one here too:
+
+Here's a fun example that works as a Babashka script. (Requires version `1.2.174` or newer).
 
 A screenshot of the UI first:
 
@@ -111,7 +117,7 @@ Then, open the `examples/examples-script.clj` file and evaluate. Have fun!
 (deps/add-deps
   '{:deps {adam-james-v/solenoid {:git/url "https://github.com/adam-james-v/solenoid/"
                                   ;; MAYBE USE LATEST SHA HERE
-                                  :sha "a7b6c95c823085b1062610999238da5f58e6a761"}}})
+                                  :sha "029d8a66c11141b94fe9be3487236beb9c325197"}}})
 
 (ns solenoid.example
   (:require [clojure.string :as str]
