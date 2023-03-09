@@ -253,7 +253,7 @@
 
 (defmacro letview
   [& body]
-  (let [block-id#        (keyword (gensym "controlblock-"))
+  (let [block-id#        (keyword (gensym "viewblock-"))
         ;; Get any derefs that are within the body of the letcontrols
         derefs-in-body#  (get-derefs body)
         ;; Add these derefs so that watches are properly registsered to all refs that drive this block.

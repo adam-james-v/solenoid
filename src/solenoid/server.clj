@@ -22,14 +22,18 @@
        (concat
          ;; render any controllers not associated with control blocks (can do this by using c/cursor directly)
          (mapv components/render-controller
-               (remove #(or (contains? % :block-id)
-                            (str/includes? (name (:id %)) "controlblock"))
+               (remove #(or (not (map? % ))
+                            (contains? % :block-id)
+                            (str/includes? (name (:id %)) "controlblock")
+                            (str/includes? (name (:id %)) "viewblock"))
                        (vals @c/registry)))
          ;; render the control blocks in the registry
          (->> @c/registry
               vals
-              (filter #(str/includes? (name (:id %)) "controlblock"))
-              (sort-by :id)
+              (filter #(and (map? %)
+                            (or (str/includes? (name (:id %)) "controlblock")
+                                (str/includes? (name (:id %)) "viewblock"))))
+              (sort-by #(-> % :id str (str/split #"-") second parse-long))
               (mapv components/render-control-block))))]]])
 
 (defn- template
