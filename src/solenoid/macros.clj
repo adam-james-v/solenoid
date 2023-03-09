@@ -34,5 +34,6 @@
          (doseq [r# ~(vec (take-nth 2 bindings))]
            ;; adds a watch to each atom in the binding that is responsible for
            ;; updating this formula whenever that atom changes.
-           (add-watch r# ~(vec (remove nil? [(keyword (gensym "update-formula-")) dependents])) update-fn#))
+           (when r#
+             (add-watch r# ~(vec (remove nil? [(keyword (gensym "update-formula-")) dependents])) update-fn#)))
          formula#))))

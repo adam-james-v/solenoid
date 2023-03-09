@@ -18,17 +18,21 @@
    (into
      [:div.grid.sm:grid-cols-2.md:grid-cols-3.lg:grid-cols-4.xl:grid-cols-5.grid-flow-row.gap-4.m-4]
      (concat
-       ;; render any controllers not associated with control blocks (can do this by using c/cursor directly)
-       (mapv components/render-controller
-             (remove #(or (contains? % :block-id)
-                          (str/includes? (name (:id %)) "controlblock"))
-                     (vals @c/registry)))
-       ;; render the control blocks in the registry
-       (->> @c/registry
-            vals
-            (filter #(str/includes? (name (:id %)) "controlblock"))
-            (sort-by :id)
-            (mapv components/render-control-block))))])
+         ;; render any controllers not associated with control blocks (can do this by using c/cursor directly)
+         (mapv components/render-controller
+               (remove #(or (not (map? % ))
+                            (contains? % :block-id)
+                            (str/includes? (name (:id %)) "controlblock")
+                            (str/includes? (name (:id %)) "viewblock"))
+                       (vals @c/registry)))
+         ;; render the control blocks in the registry
+         (->> @c/registry
+              vals
+              (filter #(and (map? %)
+                            (or (str/includes? (name (:id %)) "controlblock")
+                                (str/includes? (name (:id %)) "viewblock"))))
+              (sort-by #(-> % :id str (str/split #"-") second parse-long))
+              (mapv components/render-control-block))))])
 
 (defn- template
   ([] (template nil))
