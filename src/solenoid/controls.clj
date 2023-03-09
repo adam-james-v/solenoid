@@ -228,7 +228,7 @@
         ;; Add these derefs so that watches are properly registsered to all refs that drive this block.
         cursor-bindings# (vec (concat
                                 (make-cursor-bindings (interleave syms controls))
-                                (interleave derefs-in-body# derefs-in-body#)))
+                                (interleave (map #(-> % name symbol) derefs-in-body#) derefs-in-body#)))
         ;; `make-deref-bindings` builds up the let binding vector
         ;; for the regular let that sits inside the formula macro.
         ;; That let form is needed for re-binding the user's symbols to the cursors for each control.
@@ -250,3 +250,29 @@
                                                         ~@body))]
                                state#)}))
            :state))))
+
+(defmacro letview
+  [& body]
+  (let [block-id#        (keyword (gensym "viewblock-"))
+        ;; Get any derefs that are within the body of the letcontrols
+        derefs-in-body#  (get-derefs body)
+        ;; Add these derefs so that watches are properly registsered to all refs that drive this block.
+        cursor-bindings# (vec (concat ['_ nil] (interleave (map #(-> % name symbol) derefs-in-body#) derefs-in-body#)))
+        ;; `make-deref-bindings` builds up the let binding vector
+        ;; for the regular let that sits inside the formula macro.
+        ;; That let form is needed for re-binding the user's symbols to the cursors for each control.
+        ;; we remove the derefs-in-body because those will have been de-referenced in the body already.
+        deref-bindings#  ['_ nil]
+        ;; cursor-bindings will add the optional :dependents key with this block's ID
+        ;; so that watches can be added properly to all refs used in the body. See `solenoid.macros/formula`.
+        cursor-bindings# (vec (concat
+                                cursor-bindings#
+                                (when (seq derefs-in-body#) [:dependents block-id#])))]
+    `(-> (register!
+           (map->ControlBlock
+             {:id          ~block-id#
+              :state       (let [state# (sm/formula ~cursor-bindings#
+                                                    (let ~deref-bindings#
+                                                      ~@body))]
+                             state#)}))
+         :state)))
