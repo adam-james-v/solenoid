@@ -33,7 +33,11 @@
 (defn- make-input-map
   [{:keys [id value control-type]}]
   {:id         id
-   :class      ["form-control-sm" (name control-type) "col"]
+   :class      ["form-control-sm" (name control-type)
+                "border-form-stroke" "text-body-color" "placeholder-body-color"
+                "pl-1"
+                "focus:border-primary" "active:border-primary" "rounded-md" "border-[1px]" "outline-none" "transition"
+                "disabled:cursor-default" "disabled:bg-[#F5F7FD]"]
    :type       (control-type->input-type control-type)
    :value      (str value)
    :hx-get     (str "/controller/" id)
@@ -56,21 +60,21 @@
                  input-map-overrides
                  value-container-map-overrides]} (merge base-component-default-opts opts)
          form-key (control-type->form-key control-type)]
-     (intern 'user 'hx-vals (make-hx-vals control get-value-fn))
-     [:div
-      [:span (str (or display-name id))]
-      [:span
-       [:span
-        (when min [:span min])
-        [form-key
-         (merge
-           (make-input-map control)
-           {:hx-vals (make-hx-vals control get-value-fn)}
-           control
-           input-map-overrides)
-         ;; if there's a form like a textarea, we need to insert the value within that tag so it shows up
-         (when (#{:textarea} form-key) (str value))]
-        (when max [:span max])]]
+     [:div.grid.gap-1.self-center.text-xs
+      {:style {:align-items "center"
+               :justify-items "left"
+               :grid-template-columns "minmax(0, 1fr) minmax(0, 1fr) minmax(0, 8fr) minmax(0, 1fr) minmax(0, 1fr)"}}
+      [:span.font-bold (str (or display-name id))]
+      (when min [:span min])
+      [form-key
+       (merge
+         (make-input-map control)
+         {:hx-vals (make-hx-vals control get-value-fn)}
+         control
+         input-map-overrides)
+       ;; if there's a form like a textarea, we need to insert the value within that tag so it shows up
+       (when (#{:textarea} form-key) (str value))]
+      (when max [:span max])
       [:span
        (merge
          {:id    (str (name id) "-value")
@@ -155,10 +159,10 @@
 (defn render-control-block-result*
   "Base implementation for result render methods, useful for creating custom `render-control-block-result` methods."
   [{:keys [id]} result oob?]
-  [:div.bg-red-700
+  [:div
    (merge
      {:id          (str (name id) "-result")
-      :class       [#_"-mx-4" "control-block-result"]}
+      :class       ["control-block-result"]}
      (when oob? {:hx-swap-oob "innerHTML"}))
    (or result "no result")])
 
@@ -174,29 +178,33 @@
   "Base implementation for control block render methods, useful for creating custom `render-control-block` methods."
   [{:keys [id control-ids]} rendered-result]
   (let [controls (map @c/registry control-ids)]
-    [:div.p-4.text-gray-500.bg-white.shadow-lg.border.border-gray-100.rounded-2xl.text-sm
-     [:div {:id id}
-      ;; top bar
-      [:div.grid.grid-cols-2
-       [:h5 id]
-       [:button
-        {:hx-post (str "/action/delete/" id)
-         :hx-swap "none"}
-        "X"]]
-      ;; controls
-      (into [:div.grid.grid-auto-rows] (mapv render-controller controls))
-      ;; result
-      [:div {:class ["-mx-4" "text-center" "control-block-result" "overflow-y-auto"]} rendered-result]
-      ;; bottom bar/button group
-      [:div.flex.items-center.gap-1
-       [:button
-        {:class button-group-classes
-         :hx-post (str "/action/def/" id)
-         :hx-swap "none"} "def"]
-       [:button.bg-white.rounded-lg.hover:bg-gray-100.duration-300.transition-colors.border.px-3.py-1.text-xs
-        {:class button-group-classes
-         :hx-post (str "/action/def/" id)
-         :hx-swap "none"} "def"]]]]))
+    [:div.grid.text-gray-600.bg-white.shadow-md.hover:shadow-2xl.rounded-lg.text-sm
+     {:id id
+      :style {:align-content "space-between"}}
+     ;; top bar
+     [:div.grid.grid-cols-2.rounded-t-lg.p-1.border-b.border-slate-400
+      [:h5.pl-2 id]
+      [:button.place-self-end
+       {:hx-post (str "/action/delete/" id)
+        :hx-swap "none"}
+       [:svg {:width 15 :height 15} [:circle {:r 5 :cx 5 :cy 5 :fill "#F43F5E"}]]]]
+     ;; controls
+     (when (seq controls)
+       (into [:div.grid.gap-1.p-1.border-b.border-slate-400.px-10.py-5] (mapv render-controller controls)))
+     ;; result
+     (when rendered-result
+       [:div {:class ["control-block-result" "overflow-y-auto" "shadow-inner"]} rendered-result])
+     ;; bottom bar/button group
+     [:div.flex.items-center.gap-1.rounded-b-lg.p-1
+      (when rendered-result {:class ["border-t" "border-slate-400"]})
+      [:button
+       {:class button-group-classes
+        :hx-post (str "/action/def/" id)
+        :hx-swap "none"} "def"]
+      [:button.bg-white.rounded-lg.hover:bg-gray-100.duration-300.transition-colors.border.px-3.py-1.text-xs
+       {:class button-group-classes
+        :hx-post (str "/action/def/" id)
+        :hx-swap "none"} "def"]]]))
 
 (defmethod render-control-block :default
   [control-block]

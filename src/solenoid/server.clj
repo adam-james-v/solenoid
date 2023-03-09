@@ -16,7 +16,7 @@
   []
   [:section#app
    (into
-     [:div.grid.sm:grid-cols-2.md:grid-cols-3.lg:grid-cols-4.xl:grid-cols-5.grid-flow-row.gap-4.m-4]
+     [:div.grid.sm:grid-cols-2.md:grid-cols-3.lg:grid-cols-4.xl:grid-cols-5.grid-flow-row.gap-4.lg:mx-32.lg:my-4]
      (concat
          ;; render any controllers not associated with control blocks (can do this by using c/cursor directly)
          (mapv components/render-controller
@@ -53,16 +53,17 @@
                 [:script (slurp (io/resource "htmx.min.js"))]
                 [:script (slurp (io/resource "sse.js"))]]
                head-entries))
-       [:body.dark:bg-slate-300
-        [:span {:class       "container-fluid"
-                :hx-ext      "sse"
+       [:body
+        {:class ["bg-slate-500"]}
+        [:span {:hx-ext      "sse"
                 :sse-connect "/events"}
          [:div#reloader
           {:hx-trigger "sse:reload"
            :hx-get     "/reload"
            :hx-target  "#reloader"}
           (app-body)]]
-        [:footer
+        #_[:footer
+         {:class ["sticky" "top-[90vh]"]}
          [:h3 "solenoid"]
          [:div
           [:p "Created by "
