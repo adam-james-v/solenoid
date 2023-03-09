@@ -15,11 +15,9 @@
 (defn- app-body
   []
   [:section#app
-   [:main
-    [:div.container
-     (into
-       [:div.row.row-cols-1.row-cols-sm-1.row-cols-md-2.row-cols-lg-3.g-2]
-       (concat
+   (into
+     [:div.grid.sm:grid-cols-2.md:grid-cols-3.lg:grid-cols-4.xl:grid-cols-5.grid-flow-row.gap-4.m-4]
+     (concat
          ;; render any controllers not associated with control blocks (can do this by using c/cursor directly)
          (mapv components/render-controller
                (remove #(or (not (map? % ))
@@ -34,7 +32,7 @@
                             (or (str/includes? (name (:id %)) "controlblock")
                                 (str/includes? (name (:id %)) "viewblock"))))
               (sort-by #(-> % :id str (str/split #"-") second parse-long))
-              (mapv components/render-control-block))))]]])
+              (mapv components/render-control-block))))])
 
 (defn- template
   ([] (template nil))
@@ -48,25 +46,25 @@
                 [:meta {:name    "viewport"
                         :content "width=device-width, initial-scale=1"}]
                 [:title "solenoid"]
-                [:style (slurp (io/resource "bootstrap.min.css"))]
-                [:script (slurp (io/resource "bootstrap.bundle.min.js"))]
-                [:style (slurp (io/resource "style.css"))]
+                #_[:style (slurp (io/resource "bootstrap.min.css"))]
+                #_[:script (slurp (io/resource "bootstrap.bundle.min.js"))]
+                #_[:style (slurp (io/resource "style.css"))]
+                [:style (slurp (io/resource "output.css"))]
                 [:script (slurp (io/resource "htmx.min.js"))]
                 [:script (slurp (io/resource "sse.js"))]]
                head-entries))
-       [:body.d-flex.flex-column.h-100
-        {:data-bs-theme "dark"}
+       [:body.dark:bg-slate-300
         [:span {:class       "container-fluid"
                 :hx-ext      "sse"
                 :sse-connect "/events"}
-         [:div#reloader.row
+         [:div#reloader
           {:hx-trigger "sse:reload"
            :hx-get     "/reload"
            :hx-target  "#reloader"}
           (app-body)]]
-        [:footer.footer.mt-auto.py-3
-         [:h3.mt-4.text-center "solenoid"]
-         [:div.container
+        [:footer
+         [:h3 "solenoid"]
+         [:div
           [:p "Created by "
            [:a {:href "https://twitter.com/RustyVermeer"} "adam-james"]]]]]))))
 
@@ -94,7 +92,9 @@
      :method   :get
      :response (fn [_]
                  {:status 200
-                  :body   (html (template opts))})}
+                  :body   (let [out (html (template opts))]
+                            (spit "sample.html" out)
+                            out)})}
     {:path   "/action/:action/:id"
      :method :post
      :response

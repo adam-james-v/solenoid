@@ -57,11 +57,11 @@
                  value-container-map-overrides]} (merge base-component-default-opts opts)
          form-key (control-type->form-key control-type)]
      (intern 'user 'hx-vals (make-hx-vals control get-value-fn))
-     [:div.control.row.my-1.mx-0.p-0
-      [:span.col-3.text-end.mb-0.mt-2 (str (or display-name id))]
-      [:span.col-7 {:class (str (name control-type) "-container")}
-       [:span.row.small
-        (when min [:span.col-2.text-end.mb-0.mt-1 min])
+     [:div
+      [:span (str (or display-name id))]
+      [:span
+       [:span
+        (when min [:span min])
         [form-key
          (merge
            (make-input-map control)
@@ -70,8 +70,8 @@
            input-map-overrides)
          ;; if there's a form like a textarea, we need to insert the value within that tag so it shows up
          (when (#{:textarea} form-key) (str value))]
-        (when max [:span.col-2.mb-0.mt-1 max])]]
-      [:span.col-2.mb-0.mt-1
+        (when max [:span max])]]
+      [:span
        (merge
          {:id    (str (name id) "-value")
           :style {:display "none"}}
@@ -128,17 +128,17 @@
 
         {:keys [id display-name control-type]} control
         form-key                               (control-type->form-key control-type)]
-     [:div.control.row.my-1.mx-0.p-0
-      [:span.col-3.text-end.mb-0.mt-2 (str (or display-name id))]
-      [:span.col-7 {:class (str (name control-type) "-container")}
-       [:span.row.small
+     [:div
+      [:span (str (or display-name id))]
+      [:span {:class (str (name control-type) "-container")}
+       [:span
         [form-key
          (merge
            (make-input-map control)
            {:hx-vals (make-hx-vals control gvf)}
            control
            imo)
-         [:span.col-2.mb-0.mt-1
+         [:span
           {:id    (str (name id) "-value")
            :style {:display  "block"
                    :class    nil
@@ -155,10 +155,10 @@
 (defn render-control-block-result*
   "Base implementation for result render methods, useful for creating custom `render-control-block-result` methods."
   [{:keys [id]} result oob?]
-  [:div.text-center
+  [:div.bg-red-700
    (merge
      {:id          (str (name id) "-result")
-      :class       "control-block-result"}
+      :class       [#_"-mx-4" "control-block-result"]}
      (when oob? {:hx-swap-oob "innerHTML"}))
    (or result "no result")])
 
@@ -167,25 +167,36 @@
   (let [result @state]
     (render-control-block-result* control-block result oob?)))
 
+(def ^:private button-group-classes
+  ["bg-white" "rounded-lg" "hover:bg-gray-100" "duration-300" "transition-colors" "border" "px-3" "py-1" "text-xs"])
+
 (defn render-control-block*
   "Base implementation for control block render methods, useful for creating custom `render-control-block` methods."
   [{:keys [id control-ids]} rendered-result]
   (let [controls (map @c/registry control-ids)]
-    [:div.col.g-4
-     [:div.card {:id id}
-      [:div.card-header
-       [:span.row
-        [:h5.col.card-title.mb-0.mt-1 id]
-        [:button.btn-close.text-end.col-1.px-2
-         {:hx-post (str "/action/delete/" id)
-          :hx-swap "none"}]]]
-      [:div.card-body
-       (into [:div.row.controls] (mapv render-controller controls))
-       [:div.row.my-3 rendered-result]
-       [:div.row
-        [:div.col [:button.btn.btn-outline-secondary.btn-sm
-                   {:hx-post (str "/action/def/" id)
-                    :hx-swap "none"} "def"]]]]]]))
+    [:div.p-4.text-gray-500.bg-white.shadow-lg.border.border-gray-100.rounded-2xl.text-sm
+     [:div {:id id}
+      ;; top bar
+      [:div.grid.grid-cols-2
+       [:h5 id]
+       [:button
+        {:hx-post (str "/action/delete/" id)
+         :hx-swap "none"}
+        "X"]]
+      ;; controls
+      (into [:div.grid.grid-auto-rows] (mapv render-controller controls))
+      ;; result
+      [:div {:class ["-mx-4" "text-center" "control-block-result" "overflow-y-auto"]} rendered-result]
+      ;; bottom bar/button group
+      [:div.flex.items-center.gap-1
+       [:button
+        {:class button-group-classes
+         :hx-post (str "/action/def/" id)
+         :hx-swap "none"} "def"]
+       [:button.bg-white.rounded-lg.hover:bg-gray-100.duration-300.transition-colors.border.px-3.py-1.text-xs
+        {:class button-group-classes
+         :hx-post (str "/action/def/" id)
+         :hx-swap "none"} "def"]]]]))
 
 (defmethod render-control-block :default
   [control-block]

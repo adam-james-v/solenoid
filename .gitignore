@@ -38,3 +38,4 @@ target/checksum.txt
 *.code-workspace
 
 .calva/
+sample.html

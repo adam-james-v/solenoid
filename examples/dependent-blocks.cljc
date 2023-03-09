@@ -71,7 +71,7 @@
           :version "8.5.2"}
     [:Scene
      [:Background {:skyColor    "0.2 0.2 0.2"
-                   :transparency "1"}]
+                   #_#_:transparency "1"}]
      [:ViewpointGroup
       [:Viewpoint {:description "Perspective"
                    :position    "500 500 500"
