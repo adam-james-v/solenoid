@@ -65,8 +65,8 @@
   [result]
   [:x3d-canvas
    {:style {:margin "0 auto"
-            :width "350px"
-            :height "350px"}}
+            :width "100%" #_"350px"
+            :height "400px"}}
    [:X3D {:profile "Full"
           :version "8.5.2"}
     [:Scene

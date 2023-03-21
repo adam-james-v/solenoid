@@ -12,27 +12,52 @@
             [solenoid.utils :as u])
     (:import (java.net ServerSocket BindException)))
 
+(def ^:private sortable-init
+  "htmx.onLoad(function(content) {
+    var sortables = content.querySelectorAll('.sortable');
+    for (var i = 0; i < sortables.length; i++) {
+      var sortable = sortables[i];
+      new Sortable(sortable, {
+          animation: 150,
+          handle: '.drag-handle',
+          ghostClass: 'blue-background-class'
+      });
+    }
+    var draggables = content.querySelectorAll('.draggable');
+    for (var i = 0; i < draggables.length; i++) {
+      var draggable = draggables[i];
+      makeDraggable(draggable);
+    }
+})")
+
+(defn get-blocks
+  []
+  (vec (filter #(or (str/includes? % "controlblock")
+                    (str/includes? % "viewblock"))
+               (keys @c/registry))))
+
 (defn- app-body
   []
   [:section#app
+   [:div.grid.sm:grid-cols-1.grid-flow-row.gap-4.sortable
+      {:id         "side-container"
+       :hx-trigger "end"
+       :hx-get     "/items"
+       :hx-swap    "none"
+       :hx-include "[name='item']"}]
    (into
-     [:div.grid.sm:grid-cols-2.md:grid-cols-3.lg:grid-cols-4.xl:grid-cols-5.grid-flow-row.gap-4.lg:mx-32.lg:my-4]
-     (concat
-         ;; render any controllers not associated with control blocks (can do this by using c/cursor directly)
-         (mapv components/render-controller
-               (remove #(or (not (map? % ))
-                            (contains? % :block-id)
-                            (str/includes? (name (:id %)) "controlblock")
-                            (str/includes? (name (:id %)) "viewblock"))
-                       (vals @c/registry)))
-         ;; render the control blocks in the registry
-         (->> @c/registry
-              vals
-              (filter #(and (map? %)
-                            (or (str/includes? (name (:id %)) "controlblock")
-                                (str/includes? (name (:id %)) "viewblock"))))
-              (sort-by #(-> % :id str (str/split #"-") second parse-long))
-              (mapv components/render-control-block))))])
+     [:div.grid.sm:grid-cols-2.md:grid-cols-12.lg:grid-cols-20.xl:grid-cols-24.grid-flow-row.gap-4.xl:mx-24.m-4.sortable
+      {:id         "grid-container"
+       :hx-trigger "end"
+       :hx-get     "/items"
+       :hx-swap    "none"
+       :hx-include "[name='item']"}]
+     ;; render the control blocks in the registry
+     (let [blocks (:block-order @c/registry)
+           ks     (if (seq blocks)
+                    blocks
+                    (get-blocks))]
+       (pmap #(components/render-control-block (get @c/registry %)) ks)))])
 
 (defn- template
   ([] (template nil))
@@ -46,15 +71,20 @@
                 [:meta {:name    "viewport"
                         :content "width=device-width, initial-scale=1"}]
                 [:title "solenoid"]
-                #_[:style (slurp (io/resource "bootstrap.min.css"))]
-                #_[:script (slurp (io/resource "bootstrap.bundle.min.js"))]
-                #_[:style (slurp (io/resource "style.css"))]
                 [:style (slurp (io/resource "output.css"))]
                 [:script (slurp (io/resource "htmx.min.js"))]
-                [:script (slurp (io/resource "sse.js"))]]
+                [:script (slurp (io/resource "sse.js"))]
+                ;; sortable
+                [:script {:src "http://SortableJS.github.io/Sortable/Sortable.js"}]
+                [:script sortable-init]
+                ;; draggable SVG elements
+                [:script (slurp (io/resource "make-draggable.js"))]]
                head-entries))
        [:body
-        {:class ["bg-slate-500"]}
+        {:style {#_#_:background "conic-gradient(from .5turn at top right, darkseagreen, darkslategray)"
+                 :background "conic-gradient(from 90deg at bottom right, cyan, rebeccapurple)"
+                 :height "100%"
+                 :background-attachment "fixed !important"}}
         [:span {:hx-ext      "sse"
                 :sse-connect "/events"}
          [:div#reloader
@@ -97,30 +127,42 @@
                             (spit "sample.html" out)
                             out)})}
     {:path   "/action/:action/:id"
-     :method :post
+     :method :get
      :response
      ;; PROBLEM: This could be reworked with defmethod to allow users to define custom actions
-     (fn [{:keys [params]}]
+     (fn [{:keys [params query-string]}]
        (let [{:keys [id action]} params
              id                  (u/stringified-key->keyword id)
              action              (u/stringified-key->keyword action)
              control-ids         (get-in @c/registry [id :control-ids])]
-         (case action
-           :delete
-           ;; dissoc all of the controls and the control-block in one go, causing only one :reload
-           (swap! c/registry (fn [m] (apply (partial dissoc m) (conj control-ids id))))
-
-           :def
-           (let [state (get-in @c/registry [id :state])
-                 value (if state
-                         @state
-                         (get-in @c/registry [id :value]))]
-             (intern 'user (symbol (name id)) value))
-
-           ;; no action
-           (println "no action"))
          {:status 200
-          :body   nil}))}
+          :body
+          (case action
+            :delete
+            ;; dissoc all of the controls and the control-block in one go, causing only one :reload
+            (do
+              (swap! c/registry update :block-order (fn [v] (vec (remove #{id} v))))
+              (swap! c/registry (fn [m] (apply (partial dissoc m) (conj control-ids id)))))
+
+            :def
+            (let [state (get-in @c/registry [id :state])
+                  value (if state
+                          @state
+                          (get-in @c/registry [id :value]))]
+              (intern 'user (symbol (name id)) value))
+
+            :adjust-size
+            (let [{:keys [direction op]} (u/query-string->map query-string)
+                  [direction op]         (map keyword [direction op])
+                  op                     (get {:+ inc :- dec} op)
+                  dim-key                (get {:width :grid-w :height :grid-h} direction)
+                  current-dim            (get-in @c/registry [id dim-key] 4)]
+              (when (< 0 (op current-dim) 20)
+                (swap! c/registry assoc-in [id dim-key] (op current-dim)))
+              (html (components/render-control-block (get @c/registry id))))
+
+            ;; no action
+            (println "no action"))}))}
     ;; hit when a control is altered in the UI. ID and value must always be available
     {:path     "/controller/:id"
      :method   :get
@@ -135,29 +177,35 @@
                        dependents                            (remove #{block-id} (get-nested-dependents block-id))]
                    (when (not (nil? value)) (swap! c/registry assoc-in [id :value] value))
                    {:status 200
-                    :body   (apply str
-                                   (concat
-                                     [ ;; render a controller
-                                      (html (case (keyword control-type)
-                                              :point (components/render-point-value {:value value})
-                                              (str value)))
-                                      ;; when rendering a block, they're updated with hx out-of-band true
-                                      (when block-id
-                                        (html (components/render-control-block-result
-                                                (get @c/registry block-id)
-                                                true)))]
-                                     ;; when there are dependent control blocks, send their results too
-                                     (when (seq dependents)
-                                       (for [block-id dependents]
-                                         (html (components/render-control-block-result
-                                                 (get @c/registry block-id)
-                                                 true))))))}))}
+                    :body
+                    (apply str
+                           (concat
+                             [ ;; render a controller's value
+                              (html (case (keyword control-type)
+                                      :point (components/render-point-value (str (name id) "-value") value)
+                                      [:span {:id (str (name id) "-value") :style {:display "none"}} (str value)]))
+                              ;; when rendering a block, they're updated with hx out-of-band true
+                              (when block-id
+                                (html (components/render-control-block-result (get @c/registry block-id))))]
+                             ;; when there are dependent control blocks, send their results too
+                             (when (seq dependents)
+                               (for [block-id dependents]
+                                 (html (components/render-control-block-result (get @c/registry block-id)))))))}))}
     ;; gets hit when you (reset! event :reload) on the backend
     {:path     "/reload"
      :method   :get
      :response (fn [_req]
                  {:status 200
-                  :body   (html (app-body))})}]))
+                  :body   (html (app-body))})}
+    ;; sortable ordering
+    {:path     "/items"
+     :method   :get
+     :response (fn [{:keys [query-string]}]
+                 (let [{:keys [item]} (u/query-string->map query-string)
+                       items          (if (seq item) item [item])]
+                   (swap! c/registry assoc :block-order (mapv keyword items))
+                   {:status 200
+                    :body   nil}))}]))
 
 ;; PROBLEM: this works perfectly EXCEPT it will only refresh the browser if its the last focused window?
 ;; PROBLEM: should use 'idiomorph' for merge swapping, which should help preserve focus and state better

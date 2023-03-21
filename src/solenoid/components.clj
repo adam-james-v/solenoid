@@ -33,9 +33,9 @@
 (defn- make-input-map
   [{:keys [id value control-type]}]
   {:id         id
-   :class      ["form-control-sm" (name control-type)
+   :class      [(name control-type)
                 "border-form-stroke" "text-body-color" "placeholder-body-color"
-                "pl-1"
+                "max-w-20"
                 "focus:border-primary" "active:border-primary" "rounded-md" "border-[1px]" "outline-none" "transition"
                 "disabled:cursor-default" "disabled:bg-[#F5F7FD]"]
    :type       (control-type->input-type control-type)
@@ -63,7 +63,7 @@
      [:div.grid.gap-1.self-center.text-xs
       {:style {:align-items "center"
                :justify-items "left"
-               :grid-template-columns "minmax(0, 1fr) minmax(0, 1fr) minmax(0, 8fr) minmax(0, 1fr) minmax(0, 1fr)"}}
+               :grid-template-columns "minmax(0, 1fr) minmax(0, 1fr) minmax(0, 5fr) minmax(0, 1fr) minmax(0, 1fr)"}}
       [:span.font-bold (str (or display-name id))]
       (when min [:span min])
       [form-key
@@ -78,6 +78,8 @@
       [:span
        (merge
          {:id    (str (name id) "-value")
+          :hx-swap "innerHTML"
+          :hx-swap-oob "true"
           :style {:display "none"}}
          value-container-map-overrides) value]])))
 
@@ -99,57 +101,50 @@
   (let [val (str (:value m))]
     (base-component (assoc m :value val))))
 
-(defn render-point-value
-  [m]
-  [:div {:style {:position "relative"
-                 :display  "flex"
-                 :left     (str (- (first (:value m)) 2) "px")
-                 :top      (str (- (second (:value m)) 2) "px")
-                 :margin-top "-2px"}}
-   [:div {:style {:width "4px" :height "4px" :border-radius "4px" :background "red"}}]
-   [:div {:style {:margin-top  "-0.45em !important"
-                  :margin-left "0.2em"
-                  :width       "auto"}} (str (:value m))]])
+
+;; this can be improved. It's halfway between only working on a single point [2 3]
+;; and a list of points... Figure out how to make this more general/useful.
+;; maybe all 2D drawing type controls should be in their own namespace.
+;; also, it might be cool to write the js side of this with squint cljs?
+ (defn render-point-value [id [x y :as v]]
+   [:svg
+    {:hx-swap     "outerHTML"
+     :hx-swap-oob "true"
+     :id          id}
+    [:text
+     {:fill      "gray"
+      :transform (format "translate(%s,%s)" (+ x 7.5) (+ y 3.5))}
+     (str v)]])
 
 (defmethod render-controller Point [control]
-  (let [val (render-point-value control)
-        gvf (fn [control]
-              (str
-                "["
-                "window.event.clientX" " - "
-                "document.getElementById('" (name (:id control)) "').getBoundingClientRect().left" "\n,"
-                "window.event.clientY" " - "
-                "document.getElementById('" (name (:id control)) "').getBoundingClientRect().top"
-                "]"))
-        imo {:class      []
-             :hx-trigger :click
-             :style      {:width         "100px"
-                          :height        "100px"
-                          :padding       0
-                          :border-radius "4px"
-                          :background    "rgba(255,255,255,0.2)"
-                          :cursor        "crosshair"}}
-
-        {:keys [id display-name control-type]} control
-        form-key                               (control-type->form-key control-type)]
-     [:div
-      [:span (str (or display-name id))]
-      [:span {:class (str (name control-type) "-container")}
-       [:span
-        [form-key
-         (merge
-           (make-input-map control)
-           {:hx-vals (make-hx-vals control gvf)}
-           control
-           imo)
-         [:span
-          {:id    (str (name id) "-value")
-           :style {:display  "block"
-                   :class    nil
-                   :position "absolute"}} val]]]]]))
+  (let [pts                       (into {} (map (fn [[x y]] [(gensym "pt") {:x x :y y}]) [(:value control)]))
+        {:keys [id display-name]} control]
+    [:div
+     [:span (str (or display-name id))]
+     (into
+       [:svg {:width 150 :height 150
+              :style {:background    "rgba(255,255,255,0.2)"
+                      :touch-action  "none"
+                      :cursor        "crosshair"
+                      :border-radius "5px"} }
+        [:svg
+         #_(-> (svg-clj.elements/polygon (map (fn [[_ {:keys [x y]}]] [x y]) @asdf-pts))
+               (svg-clj.transforms/style {:stroke "black"
+                                          :fill   "none"}))]]
+       (map (fn [[id {:keys [x y]}]]
+              [:g
+               (render-point-value (str (name (:id control)) "-value") [x y])
+               [:circle.draggable
+                {:id         (name id) :fill "lightgreen" :r 5 :cx 0 :cy 0
+                 :transform  (format "translate(%s,%s)" x y)
+                 :hx-trigger "drag"
+                 :hx-get     (str "/controller/" (:id control))
+                 :hx-swap    "none"
+                 :hx-vals    (make-hx-vals control (constantly "[pos.x, pos.y]"))}]])
+            pts))]))
 
 (defmulti render-control-block-result
-  (fn [control-block _]
+  (fn [control-block]
     (-> control-block :state deref meta :result-type)))
 
 (defmulti render-control-block
@@ -158,39 +153,44 @@
 
 (defn render-control-block-result*
   "Base implementation for result render methods, useful for creating custom `render-control-block-result` methods."
-  [{:keys [id]} result oob?]
+  [{:keys [id]} result]
   [:div
-   (merge
-     {:id          (str (name id) "-result")
-      :class       ["control-block-result"]}
-     (when oob? {:hx-swap-oob "innerHTML"}))
+   {:id          (str (name id) "-result")
+    :class       ["control-block-result"]
+    :hx-swap-oob "true"
+    :hx-swap     "innerHTML"}
    (or result "no result")])
 
 (defmethod render-control-block-result :default
-  [{:keys [state] :as control-block} oob?]
+  [{:keys [state] :as control-block}]
   (let [result @state]
-    (render-control-block-result* control-block result oob?)))
+    (render-control-block-result* control-block result)))
 
 (def ^:private button-group-classes
-  ["bg-white" "rounded-lg" "hover:bg-gray-100" "duration-300" "transition-colors" "border" "px-3" "py-1" "text-xs"])
+  ["bg-white/30" "rounded-lg" "hover:bg-gray-100" "duration-300" "transition-colors" "border" "px-3" "py-1" "text-xs"])
 
 (defn render-control-block*
   "Base implementation for control block render methods, useful for creating custom `render-control-block` methods."
-  [{:keys [id control-ids]} rendered-result]
+  [{:keys [id control-ids grid-w grid-h]} rendered-result]
   (let [controls (map @c/registry control-ids)]
-    [:div.grid.text-gray-600.bg-white.shadow-md.hover:shadow-2xl.rounded-lg.text-sm
-     {:id id
-      :style {:align-content "space-between"}}
+    [:div.text-gray-600.shadow-md.hover:shadow-2xl.rounded-lg.text-sm.grid
+     {:id          id
+      :hx-swap-oob "true"
+      :hx-swap     "outerHTML"
+      :class       ["bg-white/30" "hover:bg-white/50" "backdrop-blur-md"]
+      :style       {:grid-template-rows "min-content min-content 1fr min-content"
+                    :grid-area          (format "span %s / span %s" (or grid-h 3) (or grid-w 4))}}
+     [:input {:type "hidden" :name "item" :value (name id)}]
      ;; top bar
-     [:div.grid.grid-cols-2.rounded-t-lg.p-1.border-b.border-slate-400
+     [:div.grid.grid-cols-2.rounded-t-lg.p-1.border-b.border-slate-400.drag-handle
       [:h5.pl-2 id]
       [:button.place-self-end
-       {:hx-post (str "/action/delete/" id)
+       {:hx-get  (str "/action/delete/" id)
         :hx-swap "none"}
        [:svg {:width 15 :height 15} [:circle {:r 5 :cx 5 :cy 5 :fill "#F43F5E"}]]]]
      ;; controls
      (when (seq controls)
-       (into [:div.grid.gap-1.p-1.border-b.border-slate-400.px-10.py-5] (mapv render-controller controls)))
+       (into [:div.grid.gap-1.p-1.border-b.border-slate-400.px-10.py-5.max-w-md] (mapv render-controller controls)))
      ;; result
      (when rendered-result
        [:div {:class ["control-block-result" "overflow-y-auto" "shadow-inner"]} rendered-result])
@@ -198,19 +198,33 @@
      [:div.flex.items-center.gap-1.rounded-b-lg.p-1
       (when rendered-result {:class ["border-t" "border-slate-400"]})
       [:button
-       {:class button-group-classes
-        :hx-post (str "/action/def/" id)
+       {:class   button-group-classes
+        :hx-get  (str "/action/def/" id)
         :hx-swap "none"} "def"]
-      [:button.bg-white.rounded-lg.hover:bg-gray-100.duration-300.transition-colors.border.px-3.py-1.text-xs
-       {:class button-group-classes
-        :hx-post (str "/action/def/" id)
-        :hx-swap "none"} "def"]]]))
+      [:button
+       {:class   button-group-classes
+        :hx-get  (str "/action/adjust-size/" id)
+        :hx-vals (json/generate-string {:direction :width :op :-})
+        :hx-swap "none"} "W-"]
+      [:button
+       {:class   button-group-classes
+        :hx-get  (str "/action/adjust-size/" id)
+        :hx-vals (json/generate-string {:direction :width :op :+})
+        :hx-swap "none"} "W+"]
+      [:button
+       {:class   button-group-classes
+        :hx-get  (str "/action/adjust-size/" id)
+        :hx-vals (json/generate-string {:direction :height :op :-})
+        :hx-swap "none"} "H-"]
+      [:button
+       {:class   button-group-classes
+        :hx-get  (str "/action/adjust-size/" id)
+        :hx-vals (json/generate-string {:direction :height :op :+})
+        :hx-swap "none"} "H+"]]]))
 
 (defmethod render-control-block :default
   [control-block]
-  (render-control-block*
-    control-block
-    (render-control-block-result control-block false)))
+  (render-control-block* control-block (render-control-block-result control-block)))
 
 #_(defn dropdown
   [{:keys [id value options] :as val-map}]
