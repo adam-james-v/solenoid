@@ -1,33 +1,35 @@
 (ns solenoid.server
-  (:require [clojure.java.io :as io]
+  (:require [cheshire.core :as json]
+            [clojure.data :as d]
+            [clojure.java.io :as io]
             [clojure.string :as str]
             [hiccup.core :as hiccup :refer [html]]
             [org.httpkit.server :as srv]
-            [ring-sse-middleware.core :as sse-r]
-            [ring-sse-middleware.wrapper :as sse-w]
-            [ring-sse-middleware.adapter.http-kit :as sse-h]
             [ruuter.core :as ruuter]
             [solenoid.controls :as c]
             [solenoid.components :as components]
             [solenoid.utils :as u])
     (:import (java.net ServerSocket BindException)))
 
-(def ^:private sortable-init
-  "htmx.onLoad(function(content) {
-    var sortables = content.querySelectorAll('.sortable');
-    for (var i = 0; i < sortables.length; i++) {
-      var sortable = sortables[i];
-      new Sortable(sortable, {
-          animation: 150,
-          handle: '.drag-handle',
-          ghostClass: 'blue-background-class'
-      });
-    }
-    var draggables = content.querySelectorAll('.draggable');
-    for (var i = 0; i < draggables.length; i++) {
-      var draggable = draggables[i];
-      makeDraggable(draggable);
-    }
+(def ^:private extras-init
+  "
+htmx.onLoad(function(content) {
+ var sortables = content.querySelectorAll('.sortable');
+ for (var i = 0; i < sortables.length; i++) {
+   var sortable = sortables[i];
+   new Sortable(sortable, {
+       group: 'asdf',
+       filter: '.immovable',
+       animation: 100,
+       handle: '.drag-handle',
+       ghostClass: 'blue-background-class'
+   });
+ }
+ var draggables = content.querySelectorAll('.draggable');
+ for (var i = 0; i < draggables.length; i++) {
+   var draggable = draggables[i];
+   makeDraggable(draggable);
+ }
 })")
 
 (defn get-blocks
@@ -38,26 +40,31 @@
 
 (defn- app-body
   []
-  [:section#app
-   [:div.grid.sm:grid-cols-1.grid-flow-row.gap-4.sortable
-      {:id         "side-container"
-       :hx-trigger "end"
-       :hx-get     "/items"
-       :hx-swap    "none"
-       :hx-include "[name='item']"}]
-   (into
-     [:div.grid.sm:grid-cols-2.md:grid-cols-12.lg:grid-cols-20.xl:grid-cols-24.grid-flow-row.gap-4.xl:mx-24.m-4.sortable
-      {:id         "grid-container"
-       :hx-trigger "end"
-       :hx-get     "/items"
-       :hx-swap    "none"
-       :hx-include "[name='item']"}]
-     ;; render the control blocks in the registry
-     (let [blocks (:block-order @c/registry)
-           ks     (if (seq blocks)
-                    blocks
-                    (get-blocks))]
-       (pmap #(components/render-control-block (get @c/registry %)) ks)))])
+  (let [block-keys (:block-order @c/registry)
+        ks         (if (seq block-keys)
+                     block-keys
+                     (get-blocks))
+        blocks     (pmap #(components/render-control-block (get @c/registry %)) ks)]
+    [:section#app
+     ;; WIP sidebar
+     #_[:div.grid.sm:grid-cols-1.grid-flow-row.gap-2.sortable.bg-red-700
+        {:style      {:width    "400px"
+                      :height   "90vh"
+                      :position "absolute"}
+         :id         "side-container"
+         :hx-trigger "end"
+         :hx-get     "/items"
+         :hx-swap    "none"
+         :hx-include "[name='item']"}]
+     (into
+       [:div.grid.sm:grid-cols-2.md:grid-cols-12.lg:grid-cols-20.xl:grid-cols-24.grid-flow-row.gap-4.xl:mx-24.m-4.sortable
+        {:id         "grid-container"
+         :hx-trigger "end"
+         :hx-get     "/items"
+         :hx-swap    "none"
+         :hx-include "[name='item']"}]
+       ;; render the control blocks in the registry
+       blocks)]))
 
 (defn- template
   ([] (template nil))
@@ -71,29 +78,29 @@
                 [:meta {:name    "viewport"
                         :content "width=device-width, initial-scale=1"}]
                 [:title "solenoid"]
+                [:style (slurp (io/resource "style.css"))]
                 [:style (slurp (io/resource "output.css"))]
-                [:script (slurp (io/resource "htmx.min.js"))]
-                [:script (slurp (io/resource "sse.js"))]
+                #_[:script (slurp (io/resource "htmx.min.js"))]
+                [:script {:src "https://unpkg.com/htmx.org/dist/htmx.js"}]
+                [:script {:src "https://unpkg.com/htmx.org/dist/ext/ws.js"}]
+                [:script {:src "https://unpkg.com/morphdom/dist/morphdom-umd.js"}]
+                [:script {:src "https://unpkg.com/htmx.org/dist/ext/morphdom-swap.js"}]
                 ;; sortable
                 [:script {:src "http://SortableJS.github.io/Sortable/Sortable.js"}]
-                [:script sortable-init]
+                [:script extras-init]
                 ;; draggable SVG elements
                 [:script (slurp (io/resource "make-draggable.js"))]]
                head-entries))
        [:body
-        {:style {#_#_:background "conic-gradient(from .5turn at top right, darkseagreen, darkslategray)"
-                 :background "conic-gradient(from 90deg at bottom right, cyan, rebeccapurple)"
-                 :height "100%"
+        {:hx-ext "ws,morphdom-swap"
+         :style {#_#_:background        "conic-gradient(from .5turn at top right, darkseagreen, darkslategray)"
+                 :background            "conic-gradient(from 90deg at bottom right, cyan, rebeccapurple)"
+                 :height                "100%"
                  :background-attachment "fixed !important"}}
-        [:span {:hx-ext      "sse"
-                :sse-connect "/events"}
-         [:div#reloader
-          {:hx-trigger "sse:reload"
-           :hx-get     "/reload"
-           :hx-target  "#reloader"}
-          (app-body)]]
+        [:div {:ws-connect "/socket"}
+         (app-body)]
         #_[:footer
-         {:class ["sticky" "top-[90vh]"]}
+           {:class ["sticky" "top-[90vh]"]}
          [:h3 "solenoid"]
          [:div
           [:p "Created by "
@@ -115,116 +122,139 @@
          (apply concat)
          distinct)))
 
-;; PROBLEM: Clean up the routes by pulling fns out and using defn -> good for documentation/readability
+;; websocket handling
+
+(def channels (atom #{}))
+
+(defn connect! [channel]
+  (println "Channel Opened")
+  (swap! channels conj channel))
+
+(defn disconnect! [channel status]
+  (println "Channel Closed: " status)
+  (swap! channels disj channel))
+
+(defn handle-message! [_channel ws-message]
+  (let [message (json/parse-string ws-message keyword)]
+    (println "nothing to do with message: " message)))
+
+(defn broadcast!
+  [html-str]
+  (let [f (fn [channel]
+            (if (srv/open? channel)
+              (srv/send! channel html-str)
+              (do (srv/close channel)
+                  (disconnect! channel :connection-lost))))]
+    (doall (pmap f @channels))))
+
+(defn ws-handler [request]
+  (println "initial ws request made.")
+  (srv/as-channel request
+                  {:on-receive handle-message!
+                   :on-close   disconnect!
+                   :on-open    connect!}))
+
+(defn initial-response
+  [opts]
+  (fn [_]
+    {:status 200
+     :body   (let [out (html (template opts))]
+               (spit "sample.html" out) ;; this is just for tailwind dev
+               out)}))
+
+(defn action-response
+  [{:keys [params query-string]}]
+  (let [{:keys [id action]} params
+        id                  (u/stringified-key->keyword id)
+        action              (u/stringified-key->keyword action)
+        control-ids         (get-in @c/registry [id :control-ids])]
+    (case action
+      :delete
+      ;; dissoc all of the controls and the control-block in one go, causing only one :reload
+      (do
+        (swap! c/registry update :block-order (fn [v] (vec (remove #{id} v))))
+        (swap! c/registry (fn [m] (apply (partial dissoc m) (conj control-ids id)))))
+
+      :def
+      (let [state (get-in @c/registry [id :state])
+            value (if state
+                    @state
+                    (get-in @c/registry [id :value]))]
+        (intern 'user (symbol (name id)) value))
+
+      :adjust-size
+      (let [{:keys [direction op]} (u/query-string->map query-string)
+            [direction op]         (map keyword [direction op])
+            op                     (get {:+ inc :- dec} op)
+            dim-key                (get {:width :grid-w :height :grid-h} direction)
+            current-dim            (get-in @c/registry [id dim-key] 4)]
+        (when (< 0 (op current-dim) 20)
+          (swap! c/registry assoc-in [id dim-key] (op current-dim)))
+        (html (components/render-control-block (get @c/registry id))))
+
+      ;; no action
+      (println "no action"))
+    {:status 200
+     :body   nil}))
+
+(defn controller-response
+  [{:keys [params query-string]}]
+  (let [{:keys [id]}                          params
+        id                                    (u/stringified-key->keyword id)
+        {:keys [value block-id control-type]} (u/query-string->map query-string)
+        value                                 (if (= :text (keyword control-type))
+                                                (u/get-string-value query-string)
+                                                value)
+        block-id                              (when block-id (u/stringified-key->keyword block-id))
+        dependents                            (remove #{block-id} (get-nested-dependents block-id))]
+    (when (not (nil? value)) (swap! c/registry assoc-in [id :value] value))
+    (let [altered (concat
+                    [(components/render-controller (get @c/registry id))
+                     (when block-id
+                       (components/render-control-block-result (get @c/registry block-id)))]
+                    (when (seq dependents)
+                      (for [block-id dependents]
+                        (components/render-control-block-result (get @c/registry block-id)))))]
+      (broadcast! (apply str (map #(html %) altered)))
+      {:status 200
+       :body   nil})))
+
+(defn items-response
+  [{:keys [query-string]}]
+  (let [{:keys [item]} (u/query-string->map query-string)
+        items          (if (seq item) item [item])]
+    (swap! c/registry assoc :block-order (mapv keyword items))
+    {:status 200
+     :body   nil}))
+
 (defn- routes
   ([] (routes nil))
   ([opts]
-   [{:path     "/"
+   [{:path     "/socket"
      :method   :get
-     :response (fn [_]
-                 {:status 200
-                  :body   (let [out (html (template opts))]
-                            (spit "sample.html" out)
-                            out)})}
-    {:path   "/action/:action/:id"
-     :method :get
-     :response
-     ;; PROBLEM: This could be reworked with defmethod to allow users to define custom actions
-     (fn [{:keys [params query-string]}]
-       (let [{:keys [id action]} params
-             id                  (u/stringified-key->keyword id)
-             action              (u/stringified-key->keyword action)
-             control-ids         (get-in @c/registry [id :control-ids])]
-         {:status 200
-          :body
-          (case action
-            :delete
-            ;; dissoc all of the controls and the control-block in one go, causing only one :reload
-            (do
-              (swap! c/registry update :block-order (fn [v] (vec (remove #{id} v))))
-              (swap! c/registry (fn [m] (apply (partial dissoc m) (conj control-ids id)))))
-
-            :def
-            (let [state (get-in @c/registry [id :state])
-                  value (if state
-                          @state
-                          (get-in @c/registry [id :value]))]
-              (intern 'user (symbol (name id)) value))
-
-            :adjust-size
-            (let [{:keys [direction op]} (u/query-string->map query-string)
-                  [direction op]         (map keyword [direction op])
-                  op                     (get {:+ inc :- dec} op)
-                  dim-key                (get {:width :grid-w :height :grid-h} direction)
-                  current-dim            (get-in @c/registry [id dim-key] 4)]
-              (when (< 0 (op current-dim) 20)
-                (swap! c/registry assoc-in [id dim-key] (op current-dim)))
-              (html (components/render-control-block (get @c/registry id))))
-
-            ;; no action
-            (println "no action"))}))}
+     :response (cookies/wrap-cookies ws-handler {"asdf" {:value "wasd"}})}
+    {:path     "/"
+     :method   :get
+     :response (initial-response opts)}
+    {:path     "/action/:action/:id"
+     :method   :get
+     :response action-response}
     ;; hit when a control is altered in the UI. ID and value must always be available
     {:path     "/controller/:id"
      :method   :get
-     :response (fn [{:keys [params query-string]}]
-                 (let [{:keys [id]}                          params
-                       id                                    (u/stringified-key->keyword id)
-                       {:keys [value block-id control-type]} (u/query-string->map query-string)
-                       value                                 (if (= :text (keyword control-type))
-                                                               (u/get-string-value query-string)
-                                                               value)
-                       block-id                              (when block-id (u/stringified-key->keyword block-id))
-                       dependents                            (remove #{block-id} (get-nested-dependents block-id))]
-                   (when (not (nil? value)) (swap! c/registry assoc-in [id :value] value))
-                   {:status 200
-                    :body
-                    (apply str
-                           (concat
-                             [ ;; render a controller's value
-                              (html (case (keyword control-type)
-                                      :point (components/render-point-value (str (name id) "-value") value)
-                                      [:span {:id (str (name id) "-value") :style {:display "none"}} (str value)]))
-                              ;; when rendering a block, they're updated with hx out-of-band true
-                              (when block-id
-                                (html (components/render-control-block-result (get @c/registry block-id))))]
-                             ;; when there are dependent control blocks, send their results too
-                             (when (seq dependents)
-                               (for [block-id dependents]
-                                 (html (components/render-control-block-result (get @c/registry block-id)))))))}))}
-    ;; gets hit when you (reset! event :reload) on the backend
-    {:path     "/reload"
-     :method   :get
-     :response (fn [_req]
-                 {:status 200
-                  :body   (html (app-body))})}
+     :response controller-response}
     ;; sortable ordering
     {:path     "/items"
      :method   :get
-     :response (fn [{:keys [query-string]}]
-                 (let [{:keys [item]} (u/query-string->map query-string)
-                       items          (if (seq item) item [item])]
-                   (swap! c/registry assoc :block-order (mapv keyword items))
-                   {:status 200
-                    :body   nil}))}]))
+     :response items-response}]))
 
 ;; PROBLEM: this works perfectly EXCEPT it will only refresh the browser if its the last focused window?
 ;; PROBLEM: should use 'idiomorph' for merge swapping, which should help preserve focus and state better
+
 (defn- app
   ([] (app nil))
   ([opts]
-   (-> #(ruuter/route (routes opts) %)
-       (sse-r/streaming-middleware
-         sse-h/generate-stream
-         {:request-matcher (fn [req] ((partial sse-r/uri-match "/events") req))
-          :chunk-generator (-> (fn [_]
-                                 (let [evt @c/event]
-                                   (if (= evt :reload)
-                                     (do (reset! c/event :waiting)
-                                         "event: reload\ndata:\"\"")
-                                     "waiting...")))
-                               (sse-w/wrap-delay 100)
-                               sse-w/wrap-sse-event
-                               sse-w/wrap-pst)}))))
+   #(ruuter/route (routes opts) %)))
 
 (defonce ^:private server (atom nil))
 
@@ -255,6 +285,29 @@
              (get-available-port (if (number? port) port (first port)))
              (catch Exception e (instance? BindException (.getCause e))))]
        (or result (recur (if (number? port) 0 (next port))))))))
+
+(defn- block-dim-change?
+  [[_ new _]]
+  (let [keys-from-maps (->> (vals new)
+                            (filter map?)
+                            (mapcat keys)
+                            distinct)]
+    (boolean (seq (filter #{:grid-w :grid-h} keys-from-maps)))))
+
+(defn registry-change-broadcaster
+  [_ _ old new]
+  ;; only perform actions when controllers are added or removed
+  (intern 'user 'd (d/diff old new))
+  (when (or
+          ;; block-order changes
+          (not= (:block-order old) (:block-order new))
+          ;; block is added or removed
+          (not= (keys old) (keys new))
+          ;; block dims change
+          (block-dim-change? (d/diff old new)))
+    (broadcast! (html (app-body)))))
+
+(add-watch c/registry :registry-change-broadcaster registry-change-broadcaster)
 
 (defn serve!
   [& {:keys [port] :as opts}]

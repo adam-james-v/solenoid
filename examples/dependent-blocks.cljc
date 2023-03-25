@@ -52,13 +52,12 @@
 ;; The added step of creating one more method is well worth the bit of effort to get it right!
 
 (defmethod components/render-control-block-result :x3d
-  [{:keys [id state]} oob?]
+  [{:keys [id state]}]
   (let [result @state]
     [:Group.text-center
      (merge
        {:id          (str (name id) "-result")
-        :class       "control-block-result"}
-       (when oob? {:hx-swap-oob "innerHTML"}))
+        :class       "control-block-result"})
      (or result "no result")]))
 
 (defn x3d-result-wrap-fn
@@ -88,7 +87,7 @@
       ;; You still need to define the result rendering separately because `render-control-block-result`
       ;; runs outside of this context as well. In particular, any time a controller changes, the result render
       ;; runs but the `render-control-block` doesn't.
-      (components/render-control-block-result control-block false))))
+      (components/render-control-block-result control-block))))
 
 ;; OK! That's all of the custom work we need. Now we can build out some cool examples!
 

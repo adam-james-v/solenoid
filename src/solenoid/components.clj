@@ -30,19 +30,20 @@
    :edn    :textarea
    :point  :div})
 
+(def ^:private input-map-classes
+  ["border-form-stroke" "text-body-color" "placeholder-body-color"
+   "max-w-20"
+   "focus:border-primary" "active:border-primary" "rounded-md" "border-[1px]" "outline-none" "transition"
+   "disabled:cursor-default" "disabled:bg-[#F5F7FD]"])
+
 (defn- make-input-map
   [{:keys [id value control-type]}]
-  {:id         id
-   :class      [(name control-type)
-                "border-form-stroke" "text-body-color" "placeholder-body-color"
-                "max-w-20"
-                "focus:border-primary" "active:border-primary" "rounded-md" "border-[1px]" "outline-none" "transition"
-                "disabled:cursor-default" "disabled:bg-[#F5F7FD]"]
-   :type       (control-type->input-type control-type)
-   :value      (str value)
-   :hx-get     (str "/controller/" id)
-   :hx-trigger "input"
-   :hx-target  (str "#" (name id) "-value")})
+  {:id              id
+   :class           input-map-classes
+   :type            (control-type->input-type control-type)
+   :value           (str value)
+   :hx-get          (str "/controller/" id)
+   :hx-trigger      "input"})
 
 (def ^:private base-component-default-opts
   {:input-map-overrides           {}
@@ -58,12 +59,15 @@
    (let [{:keys [id display-name value min max control-type]} control
          {:keys [get-value-fn
                  input-map-overrides
-                 value-container-map-overrides]} (merge base-component-default-opts opts)
-         form-key (control-type->form-key control-type)]
+                 value-container-map-overrides]}              (merge base-component-default-opts opts)
+         form-key                                             (control-type->form-key control-type)]
      [:div.grid.gap-1.self-center.text-xs
-      {:style {:align-items "center"
-               :justify-items "left"
-               :grid-template-columns "minmax(0, 1fr) minmax(0, 1fr) minmax(0, 5fr) minmax(0, 1fr) minmax(0, 1fr)"}}
+      {:hx-swap-oob "morphdom"
+       :hx-swap     "none"
+       :id          (str (name id) "-container")
+       :style       {:align-items           "center"
+                     :justify-items         "left"
+                     :grid-template-columns "minmax(0, 1fr) minmax(0, 1fr) minmax(0, 5fr) minmax(0, 1fr) minmax(0, 1fr)"}}
       [:span.font-bold (str (or display-name id))]
       (when min [:span min])
       [form-key
@@ -78,8 +82,6 @@
       [:span
        (merge
          {:id    (str (name id) "-value")
-          :hx-swap "innerHTML"
-          :hx-swap-oob "true"
           :style {:display "none"}}
          value-container-map-overrides) value]])))
 
@@ -106,20 +108,28 @@
 ;; and a list of points... Figure out how to make this more general/useful.
 ;; maybe all 2D drawing type controls should be in their own namespace.
 ;; also, it might be cool to write the js side of this with squint cljs?
- (defn render-point-value [id [x y :as v]]
-   [:svg
-    {:hx-swap     "outerHTML"
-     :hx-swap-oob "true"
-     :id          id}
-    [:text
-     {:fill      "gray"
-      :transform (format "translate(%s,%s)" (+ x 7.5) (+ y 3.5))}
-     (str v)]])
+(defn render-point-value [control [x y :as v]]
+  (let [id (str (name (:id control)) "-pt")]
+    [:g
+     {:id id}
+     [:svg [:circle.draggable
+            {:fill       "lightgreen" :r 5 :cx 0 :cy 0
+             :transform  (format "translate(%s,%s)" x y)
+             :hx-trigger "drag"
+             :hx-get     (str "/controller/" (:id control))
+             :hx-swap    "none"
+             :hx-vals    (make-hx-vals control (constantly "[pos.x, pos.y]"))}]]
+     [:text
+      {:fill      "gray"
+       :transform (format "translate(%s,%s)" (+ x 7.5) (+ y 3.5))}
+      (str v)]]))
 
 (defmethod render-controller Point [control]
   (let [pts                       (into {} (map (fn [[x y]] [(gensym "pt") {:x x :y y}]) [(:value control)]))
         {:keys [id display-name]} control]
     [:div
+     {:id id
+      :hx-swap-oob "morphdom"}
      [:span (str (or display-name id))]
      (into
        [:svg {:width 150 :height 150
@@ -127,20 +137,12 @@
                       :touch-action  "none"
                       :cursor        "crosshair"
                       :border-radius "5px"} }
-        [:svg
-         #_(-> (svg-clj.elements/polygon (map (fn [[_ {:keys [x y]}]] [x y]) @asdf-pts))
+        #_[:svg
+           (-> (svg-clj.elements/polygon (map (fn [[_ {:keys [x y]}]] [x y]) @asdf-pts))
                (svg-clj.transforms/style {:stroke "black"
                                           :fill   "none"}))]]
        (map (fn [[id {:keys [x y]}]]
-              [:g
-               (render-point-value (str (name (:id control)) "-value") [x y])
-               [:circle.draggable
-                {:id         (name id) :fill "lightgreen" :r 5 :cx 0 :cy 0
-                 :transform  (format "translate(%s,%s)" x y)
-                 :hx-trigger "drag"
-                 :hx-get     (str "/controller/" (:id control))
-                 :hx-swap    "none"
-                 :hx-vals    (make-hx-vals control (constantly "[pos.x, pos.y]"))}]])
+              (render-point-value control [x y]))
             pts))]))
 
 (defmulti render-control-block-result
@@ -157,8 +159,7 @@
   [:div
    {:id          (str (name id) "-result")
     :class       ["control-block-result"]
-    :hx-swap-oob "true"
-    :hx-swap     "innerHTML"}
+    :hx-swap-oob "morphdom"}
    (or result "no result")])
 
 (defmethod render-control-block-result :default
@@ -195,7 +196,7 @@
      (when rendered-result
        [:div {:class ["control-block-result" "overflow-y-auto" "shadow-inner"]} rendered-result])
      ;; bottom bar/button group
-     [:div.flex.items-center.gap-1.rounded-b-lg.p-1
+     [:div.flex.items-center.gap-1.rounded-b-lg.p-1.control-block-bottom-bar
       (when rendered-result {:class ["border-t" "border-slate-400"]})
       [:button
        {:class   button-group-classes

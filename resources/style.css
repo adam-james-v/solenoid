@@ -1,10 +1,12 @@
+/*
 :root {
-    font-size: 0.625rem;
+    font-size: 1rem; 0.625rem;
 }
 
-html {
-    height: 100%;
+body {
+    font-family: "Fira Code", monospace;
 }
+*/
 
 /* Hide scrollbar for Chrome, Safari and Opera */
 :root::-webkit-scrollbar, .control-block-result::-webkit-scrollbar {
@@ -17,7 +19,8 @@ html {
     scrollbar-width: none;  /* Firefox */
 }
 
-body {
-    font-family: "Fira Code", monospace;
-    background: #2e3440;
+#side-container .control-block-result,
+#side-container .control-block-bottom-bar {
+    display: none;
+    scale: 80%;
 }

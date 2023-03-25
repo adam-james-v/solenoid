@@ -4,15 +4,12 @@
             [clojure.string :as str]
             [solenoid.utils :as u]))
 
-(defonce event (atom :waiting :validator #(#{:waiting :reload} %)))
 (defonce registry (atom {} :validator map?))
 
 (defn registry-watcher
   [_ _ old new]
   ;; only perform actions when controllers are added or removed
   (when (not= (keys old) (keys new))
-    ;; send a reload event to the frontend, so controllers changes are reflected in the UI
-    (reset! event :reload)
     ;; when controllers are removed, remove any watches associated with affected cursor paths
     (let [removed (set/difference (set (keys old)) (set (keys new)))]
       (when (seq removed)
@@ -28,7 +25,7 @@
           ;; In such cases, old watches on still-existing blocks must be removed so that we don't get any NPEs
           (when (seq cb-watches)
             (doseq [cb (keys new)
-                    w cb-watches]
+                    w  cb-watches]
               (swap! registry update-in [cb :state] (fn [ref]
                                                       (when ref (remove-watch ref w))))))
           (when (seq paths)
