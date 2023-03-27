@@ -47,8 +47,8 @@ htmx.onLoad(function(content) {
   []
   (let [side-bar-keys   (:side-bar-order @c/registry)
         block-grid-keys (:block-grid-order @c/registry)
-        block-grid-keys (if (not (and (seq side-bar-keys)
-                                      (seq block-grid-keys)))
+        block-grid-keys (if (and (not (seq side-bar-keys))
+                                 (not (seq block-grid-keys)))
                           (get-block-keys)
                           (:block-grid-order @c/registry))
         rendered-blocks (into {}
