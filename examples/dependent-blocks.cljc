@@ -57,7 +57,8 @@
     [:Group.text-center
      (merge
        {:id          (str (name id) "-result")
-        :class       "control-block-result"})
+        :class       ["control-block-result"]
+        :hx-swap-oob "morphdom"})
      (or result "no result")]))
 
 (defn x3d-result-wrap-fn

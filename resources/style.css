@@ -19,8 +19,8 @@ body {
     scrollbar-width: none;  /* Firefox */
 }
 
-#side-container .control-block-result,
-#side-container .control-block-bottom-bar {
+#side-bar .control-block-result,
+#side-bar .control-block-bottom-bar {
     display: none;
     scale: 80%;
 }

@@ -852,6 +852,10 @@ video {
   flex-direction: row-reverse;
 }
 
+.flex-col {
+  flex-direction: column;
+}
+
 .items-center {
   align-items: center;
 }

@@ -30,9 +30,14 @@ htmx.onLoad(function(content) {
    var draggable = draggables[i];
    makeDraggable(draggable);
  }
+ var movables = content.querySelectorAll('.movable');
+ for (var i = 0; i < movables.length; i++) {
+   var movable = movables[i];
+   makeMovable(movable);
+ }
 })")
 
-(defn get-blocks
+(defn get-block-keys
   []
   (vec (filter #(or (str/includes? % "controlblock")
                     (str/includes? % "viewblock"))
@@ -40,31 +45,50 @@ htmx.onLoad(function(content) {
 
 (defn- app-body
   []
-  (let [block-keys (:block-order @c/registry)
-        ks         (if (seq block-keys)
-                     block-keys
-                     (get-blocks))
-        blocks     (pmap #(components/render-control-block (get @c/registry %)) ks)]
-    [:section#app
+  (let [side-bar-keys   (:side-bar-order @c/registry)
+        block-grid-keys (:block-grid-order @c/registry)
+        block-grid-keys (if (not (and (seq side-bar-keys)
+                                      (seq block-grid-keys)))
+                          (get-block-keys)
+                          (:block-grid-order @c/registry))
+        rendered-blocks (into {}
+                              (pmap (fn [k]
+                                      [k (components/render-control-block (get @c/registry k))]) (concat side-bar-keys block-grid-keys)))]
+    [:section#app.flex
+     #_{:draggable  "true"
+      :style {:position "absolute"
+              :left     "0px"
+              :top      "0px"
+              :width    "100vw"
+              :height   "100vh"}}
      ;; WIP sidebar
-     #_[:div.grid.sm:grid-cols-1.grid-flow-row.gap-2.sortable.bg-red-700
+     (into
+       [:div.flex.flex-col.gap-2.sortable.bg-red-700
         {:style      {:width    "400px"
-                      :height   "90vh"
-                      :position "absolute"}
-         :id         "side-container"
+                      :height   "90vh"}
+         :id         "side-bar"
          :hx-trigger "end"
          :hx-get     "/items"
          :hx-swap    "none"
+         :hx-vals    (str "js:{"
+                          "\"side-bar\": [...document.querySelectorAll('#side-bar > div')].map(({ id }) => id),"
+                          "\"block-grid\": [...document.querySelectorAll('#block-grid > div')].map(({ id }) => id)"
+                          "}")
          :hx-include "[name='item']"}]
+       (when (seq side-bar-keys) (map rendered-blocks side-bar-keys)))
      (into
        [:div.grid.sm:grid-cols-2.md:grid-cols-12.lg:grid-cols-20.xl:grid-cols-24.grid-flow-row.gap-4.xl:mx-24.m-4.sortable
-        {:id         "grid-container"
+        {:id         "block-grid"
          :hx-trigger "end"
          :hx-get     "/items"
          :hx-swap    "none"
+         :hx-vals    (str "js:{"
+                          "\"side-bar\": [...document.querySelectorAll('#side-bar > div')].map(({ id }) => id),"
+                          "\"block-grid\": [...document.querySelectorAll('#block-grid > div')].map(({ id }) => id)"
+                          "}")
          :hx-include "[name='item']"}]
        ;; render the control blocks in the registry
-       blocks)]))
+       (map rendered-blocks block-grid-keys))]))
 
 (defn- template
   ([] (template nil))
@@ -172,7 +196,8 @@ htmx.onLoad(function(content) {
       :delete
       ;; dissoc all of the controls and the control-block in one go, causing only one :reload
       (do
-        (swap! c/registry update :block-order (fn [v] (vec (remove #{id} v))))
+        (swap! c/registry update :block-grid-order (fn [v] (vec (remove #{id} v))))
+        (swap! c/registry update :side-bar-order (fn [v] (vec (remove #{id} v))))
         (swap! c/registry (fn [m] (apply (partial dissoc m) (conj control-ids id)))))
 
       :def
@@ -220,19 +245,23 @@ htmx.onLoad(function(content) {
        :body   nil})))
 
 (defn items-response
-  [{:keys [query-string]}]
-  (let [{:keys [item]} (u/query-string->map query-string)
-        items          (if (seq item) item [item])]
-    (swap! c/registry assoc :block-order (mapv keyword items))
-    {:status 200
-     :body   nil}))
+  [{:keys [query-string] :as aaa}]
+  (let [{:keys [item side-bar block-grid]} (u/query-string->map query-string)
+        side-bar                           (if (symbol? side-bar) [side-bar] side-bar)
+        block-grid                         (if (symbol? block-grid) [block-grid] block-grid)]
+    (println "side-bar: " side-bar)
+    (println "block-grid: " block-grid)
+    (swap! c/registry merge {:block-grid-order (mapv keyword (if (symbol? block-grid) [block-grid] block-grid))
+                             :side-bar-order   (mapv keyword (if (symbol? side-bar) [side-bar] side-bar))}))
+  {:status 200
+   :body   nil})
 
 (defn- routes
   ([] (routes nil))
   ([opts]
    [{:path     "/socket"
      :method   :get
-     :response (cookies/wrap-cookies ws-handler {"asdf" {:value "wasd"}})}
+     :response ws-handler}
     {:path     "/"
      :method   :get
      :response (initial-response opts)}
@@ -294,17 +323,39 @@ htmx.onLoad(function(content) {
                             distinct)]
     (boolean (seq (filter #{:grid-w :grid-h} keys-from-maps)))))
 
-(defn registry-change-broadcaster
+(defn- block-key [k]
+  (or (str/starts-with? (name k) "control")
+      (str/starts-with? (name k) "view")))
+
+(defn- block-added?
+  [[_ new _]]
+  (let [ks (keys new)]
+    (boolean (seq (filter block-key ks)))))
+
+(defn- block-state-change-watcher
+  [id]
+  (fn [_ _ _ _]
+    (let [block (get @c/registry id)
+          render #'components/render-control-block-result]
+      (when block
+        (broadcast! (html (render block)))))))
+
+(defn- registry-change-broadcaster
   [_ _ old new]
   ;; only perform actions when controllers are added or removed
-  (intern 'user 'd (d/diff old new))
   (when (or
           ;; block-order changes
-          (not= (:block-order old) (:block-order new))
+          (not= (:block-grid-order old) (:block-grid-order new))
+          (not= (:side-bar-order old) (:side-bar-order new))
           ;; block is added or removed
           (not= (keys old) (keys new))
           ;; block dims change
           (block-dim-change? (d/diff old new)))
+    ;; WIP trying to allow regular atoms (not in the registry) to 'push' changes automatically.
+    #_(when (block-added? (d/diff old new))
+      (let [ks (filter block-key (keys new))]
+        (doseq [k ks]
+          (add-watch (get-in new [k :state]) :block-state-change-watcher (block-state-change-watcher k)))))
     (broadcast! (html (app-body)))))
 
 (add-watch c/registry :registry-change-broadcaster registry-change-broadcaster)

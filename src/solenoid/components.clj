@@ -103,7 +103,6 @@
   (let [val (str (:value m))]
     (base-component (assoc m :value val))))
 
-
 ;; this can be improved. It's halfway between only working on a single point [2 3]
 ;; and a list of points... Figure out how to make this more general/useful.
 ;; maybe all 2D drawing type controls should be in their own namespace.
