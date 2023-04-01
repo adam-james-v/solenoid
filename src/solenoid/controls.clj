@@ -141,14 +141,19 @@
   (let [default-values {:control-type :edn}]
     (map->EdnBlock (merge default-values m {:value (or value :default-value)}))))
 
-(defrecord Point [control-type id value display-name]
+(defrecord Point [control-type id value width height origin display-name]
   Control
   (validate [_ value]
     (maybe-read-string (str value))))
 
-(defn make-point [{:keys [value] :as m}]
-  (let [default-values {:control-type :point}]
-    (map->Point (merge default-values m {:value (or value [0 0])}))))
+(defn make-point [{:keys [value width height] :as m}]
+  (let [w              (or width 150)
+        h              (or height 150)
+        default-values {:control-type :point
+                        :width        w
+                        :height       h
+                        :origin       [(/ w 2.0) (/ h 2.0)]}]
+    (map->Point (merge default-values m {:value (vec (or (seq (filter seq value)) [[0 0]]))}))))
 
 (def control-key->control-fn
   {:num    make-num

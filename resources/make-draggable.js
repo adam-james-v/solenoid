@@ -6,19 +6,43 @@
 // coordinates for the location of the element.
 
 var pos = {};
+var new_point = {};
+
+function makeDrawable(el){
+  if (!el) return console.error('makeDrawable() needs an element');
+  let svg = el;
+  let pt=svg.createSVGPoint(), doc=svg.ownerDocument;
+  // Convert mouse position from screen space to coordinates of el
+  function inElementSpace(evt){
+    pt.x=evt.clientX; pt.y=evt.clientY;
+    return pt.matrixTransform(el.getScreenCTM().inverse());
+  }
+
+  while (svg && svg.tagName!='svg') svg=svg.parentNode;
+  if (!svg) return console.error(el, 'must be an SVG wrapper');
+  el.addEventListener("dblclick", (e) => {
+    new_point = inElementSpace(e);
+    let event = new Event("pointadd");
+    el.dispatchEvent(event)
+  });
+}
 
 function makeDraggable(el){
   if (!el) return console.error('makeDraggable() needs an element');
-  var svg = el;
+  let svg = el;
   while (svg && svg.tagName!='svg') svg=svg.parentNode;
   if (!svg) return console.error(el, 'must be inside an SVG wrapper');
-  var pt=svg.createSVGPoint(), doc=svg.ownerDocument;
+  let pt=svg.createSVGPoint(), doc=svg.ownerDocument;
 
-  var root = doc.rootElement || doc.body || svg;
-  var xlate, txStartX, txStartY, mouseStart;
-  var xforms = el.transform.baseVal;
+  let root = doc.rootElement || doc.body || svg;
+  let xlate, txStartX, txStartY, mouseStart;
+  let xforms = el.transform.baseVal;
 
   el.addEventListener('pointerdown', startMove, false);
+  el.addEventListener("dblclick", (e) => {
+    console.log("double Click on a Point.");
+    fireEvent('pointremove');
+  });
 
   function startMove(evt){
     // We listen for mousemove/up on the root-most
@@ -54,8 +78,8 @@ function makeDraggable(el){
   }
 
   function fireEvent(eventName){
-    var event = new Event(eventName);
-    event.detail = { x:xlate.matrix.e, y:xlate.matrix.f };
+    let event = new Event(eventName);
+    event.detail = { x:xlate.matrix.e, y:xlate.matrix.f, id:el.id  };
     pos = { x:xlate.matrix.e, y:xlate.matrix.f, id:el.id };
     return el.dispatchEvent(event);
   }
@@ -75,7 +99,7 @@ function makeDraggable(el){
 function makeMovable(el){
   console.log("movable");
   function drag_start(event) {
-    var style = window.getComputedStyle(event.target, null);
+    let style = window.getComputedStyle(event.target, null);
     event.dataTransfer.setData("text/plain",
                                (parseInt(style.getPropertyValue("left"),10) - event.clientX) + ',' + (parseInt(style.getPropertyValue("top"),10) - event.clientY));
   }
@@ -84,7 +108,7 @@ function makeMovable(el){
     return false;
   }
   function drop(event) {
-    var offset = event.dataTransfer.getData("text/plain").split(',');
+    let offset = event.dataTransfer.getData("text/plain").split(',');
     el.style.left = (event.clientX + parseInt(offset[0],10)) + 'px';
     el.style.top = (event.clientY + parseInt(offset[1],10)) + 'px';
     event.preventDefault();

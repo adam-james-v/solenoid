@@ -3,7 +3,7 @@
    (require '[babashka.deps :as deps])
    (deps/add-deps
      '{:deps {adam-james-v/solenoid {:git/url "https://github.com/adam-james-v/solenoid/"
-                                     :sha "85ce76eadefdc3793d59a40e031b1eb5cc99942c"}}})
+                                     :sha "c0ab90c73fbc61fa25f24b83b13e3be4d81dab1a"}}})
 
    (let [[major minor patch] (->> (clojure.string/split (System/getProperty "babashka.version") #"\.")
                                   (map parse-long))]

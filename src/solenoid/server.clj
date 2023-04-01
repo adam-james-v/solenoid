@@ -30,12 +30,22 @@ htmx.onLoad(function(content) {
    var draggable = draggables[i];
    makeDraggable(draggable);
  }
+ var drawables = content.querySelectorAll('.drawable');
+ for (var i = 0; i < drawables.length; i++) {
+   var drawable = drawables[i];
+   makeDrawable(drawable);
+ }
  var movables = content.querySelectorAll('.movable');
  for (var i = 0; i < movables.length; i++) {
    var movable = movables[i];
    makeMovable(movable);
  }
-})")
+})
+
+htmx.on('htmx:beforeSend', function(evt) {
+  new_point = {};
+})
+")
 
 (defn get-block-keys
   []
@@ -51,41 +61,35 @@ htmx.onLoad(function(content) {
                                  (not (seq block-grid-keys)))
                           (get-block-keys)
                           (:block-grid-order @c/registry))
+        hx-vals         (str "js:{"
+                             "\"side-bar\": [...document.querySelectorAll('#side-bar > div')].map(({ id }) => id),"
+                             "\"block-grid\": [...document.querySelectorAll('#block-grid > div')].map(({ id }) => id)"
+                             "}")
         rendered-blocks (into {}
                               (pmap (fn [k]
                                       [k (components/render-control-block (get @c/registry k))]) (concat side-bar-keys block-grid-keys)))]
     [:section#app.flex
-     #_{:draggable  "true"
-      :style {:position "absolute"
-              :left     "0px"
-              :top      "0px"
-              :width    "100vw"
-              :height   "100vh"}}
      ;; WIP sidebar
-     (into
-       [:div.flex.flex-col.gap-2.sortable.bg-red-700
-        {:style      {:width    "400px"
-                      :height   "90vh"}
+     #_(into
+       [:span.flex.flex-col.gap-2.sortable.self-start
+        {:class      ["bg-white/30"]
+         :style      {:width     "300px"
+                      :max-width "300px"
+                      :height    "100vh"}
          :id         "side-bar"
          :hx-trigger "end"
          :hx-get     "/items"
          :hx-swap    "none"
-         :hx-vals    (str "js:{"
-                          "\"side-bar\": [...document.querySelectorAll('#side-bar > div')].map(({ id }) => id),"
-                          "\"block-grid\": [...document.querySelectorAll('#block-grid > div')].map(({ id }) => id)"
-                          "}")
+         :hx-vals    hx-vals
          :hx-include "[name='item']"}]
        (when (seq side-bar-keys) (map rendered-blocks side-bar-keys)))
      (into
-       [:div.grid.sm:grid-cols-2.md:grid-cols-12.lg:grid-cols-20.xl:grid-cols-24.grid-flow-row.gap-4.xl:mx-24.m-4.sortable
+       [:span.grid.sm:grid-cols-2.md:grid-cols-12.lg:grid-cols-20.xl:grid-cols-24.grid-flow-row.gap-4.xl:mx-24.m-4.sortable.self-start
         {:id         "block-grid"
          :hx-trigger "end"
          :hx-get     "/items"
          :hx-swap    "none"
-         :hx-vals    (str "js:{"
-                          "\"side-bar\": [...document.querySelectorAll('#side-bar > div')].map(({ id }) => id),"
-                          "\"block-grid\": [...document.querySelectorAll('#block-grid > div')].map(({ id }) => id)"
-                          "}")
+         :hx-vals    hx-vals
          :hx-include "[name='item']"}]
        ;; render the control blocks in the registry
        (map rendered-blocks block-grid-keys))]))
@@ -224,17 +228,19 @@ htmx.onLoad(function(content) {
 
 (defn controller-response
   [{:keys [params query-string]}]
-  (let [{:keys [id]}                          params
-        id                                    (u/stringified-key->keyword id)
-        {:keys [value block-id control-type]} (u/query-string->map query-string)
-        value                                 (if (= :text (keyword control-type))
-                                                (u/get-string-value query-string)
-                                                value)
-        block-id                              (when block-id (u/stringified-key->keyword block-id))
-        dependents                            (remove #{block-id} (get-nested-dependents block-id))]
+  (intern 'user 'qs query-string)
+  (let [{:keys [id]}                                   params
+        id                                             (u/stringified-key->keyword id)
+        {:keys [value block-id control-type to-remove] :as data} (u/query-string->map query-string)
+        value                                          (if (= :text (keyword control-type))
+                                                         (u/get-string-value query-string)
+                                                         value)
+        block-id                                       (when block-id (u/stringified-key->keyword block-id))
+        dependents                                     (remove #{block-id} (get-nested-dependents block-id))]
+    (intern 'user 'd data)
     (when (not (nil? value)) (swap! c/registry assoc-in [id :value] value))
     (let [altered (concat
-                    [(components/render-controller (get @c/registry id))
+                    [(components/render-controller #_(merge {:to-remove to-remove}) (get @c/registry id))
                      (when block-id
                        (components/render-control-block-result (get @c/registry block-id)))]
                     (when (seq dependents)
@@ -245,10 +251,10 @@ htmx.onLoad(function(content) {
        :body   nil})))
 
 (defn items-response
-  [{:keys [query-string] :as aaa}]
-  (let [{:keys [item side-bar block-grid]} (u/query-string->map query-string)
-        side-bar                           (if (symbol? side-bar) [side-bar] side-bar)
-        block-grid                         (if (symbol? block-grid) [block-grid] block-grid)]
+  [{:keys [query-string]}]
+  (let [{:keys [side-bar block-grid]} (u/query-string->map query-string)
+        side-bar                      (if (symbol? side-bar) [side-bar] side-bar)
+        block-grid                    (if (symbol? block-grid) [block-grid] block-grid)]
     (println "side-bar: " side-bar)
     (println "block-grid: " block-grid)
     (swap! c/registry merge {:block-grid-order (mapv keyword (if (symbol? block-grid) [block-grid] block-grid))

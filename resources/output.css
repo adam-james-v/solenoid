@@ -908,6 +908,10 @@ video {
   place-self: end;
 }
 
+.self-start {
+  align-self: flex-start;
+}
+
 .self-center {
   align-self: center;
 }

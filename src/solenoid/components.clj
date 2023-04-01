@@ -103,45 +103,82 @@
   (let [val (str (:value m))]
     (base-component (assoc m :value val))))
 
-;; this can be improved. It's halfway between only working on a single point [2 3]
-;; and a list of points... Figure out how to make this more general/useful.
-;; maybe all 2D drawing type controls should be in their own namespace.
-;; also, it might be cool to write the js side of this with squint cljs?
-(defn render-point-value [control [x y :as v]]
-  (let [id (str (name (:id control)) "-pt")]
+(defn- pt-values-stringify
+  [values]
+  (let [values (map #(if (and (not (string? %))
+                              (seqable? %))
+                       (pt-values-stringify %)
+                       (str %))
+                    values)]
+    (apply str (concat ["\"[\","] (interpose "," values) [",\"]\""]))))
+
+(defn render-point-value [control pts pt-id [x y :as v]]
+  (let [new-pt-id (count pts)
+        pts       (-> pts
+                      (update-vals (fn [{:keys [x y]}] [x y]))
+                      (assoc pt-id ["pos.x" "pos.y"])
+                      #_(assoc new-pt-id ["new_point.x" "new_point.y"]))
+        pts (mapv #(get pts %) (range (count pts)))]
     [:g
-     {:id id}
-     [:svg [:circle.draggable
-            {:fill       "lightgreen" :r 5 :cx 0 :cy 0
-             :transform  (format "translate(%s,%s)" x y)
-             :hx-trigger "drag"
-             :hx-get     (str "/controller/" (:id control))
-             :hx-swap    "none"
-             :hx-vals    (make-hx-vals control (constantly "[pos.x, pos.y]"))}]]
+     {:id (str (name (:id control)) "-" pt-id)}
+     [:circle.draggable
+      {:fill       "lightgreen" :r 5 :cx 0 :cy 0
+       :transform  (format "translate(%s,%s)" x y)
+       :hx-trigger "drag"
+       :hx-get     (str "/controller/" (:id control))
+       :hx-swap    "none"
+       :hx-vals    (make-hx-vals control (constantly (format "[%s].toString()" (pt-values-stringify pts))))}]
      [:text
-      {:fill      "gray"
+      {:style     {:pointer-events      "none"
+                   :user-select         "none"
+                   :-webkit-user-select "none"}
+       :fill      "gray"
        :transform (format "translate(%s,%s)" (+ x 7.5) (+ y 3.5))}
       (str v)]]))
 
 (defmethod render-controller Point [control]
-  (let [pts                       (into {} (map (fn [[x y]] [(gensym "pt") {:x x :y y}]) [(:value control)]))
-        {:keys [id display-name]} control]
+  (let [{:keys [id display-name to-remove width height origin]} control
+
+        [ox oy] origin
+        pts     (into {} (map (fn [id [x y]]
+                                (when (and x y)
+                                  [id {:x x :y y}])) (range) (:value control)))
+        pts     (dissoc pts (when to-remove
+                              (parse-long (last (str/split to-remove #"-")))))
+        hx-vals (make-hx-vals
+                  (assoc control :to-remove (pt-values-stringify [["pos.x"]]))
+                  (constantly (format "[%s].toString()"
+                                      (pt-values-stringify (vec (filter seq (vec (concat (:value control) [["new_point.x" "new_point.y"]]))))))))]
     [:div
-     {:id id
+     {:id          id
       :hx-swap-oob "morphdom"}
      [:span (str (or display-name id))]
      (into
-       [:svg {:width 150 :height 150
-              :style {:background    "rgba(255,255,255,0.2)"
+       [:svg.drawable
+        {:width      width :height height
+         :viewBox    (format "%s %s %s %s" (- ox) (- oy) width height)
+         :hx-trigger "pointadd,pointremove"
+         :hx-get     (str "/controller/" (:id control))
+         :hx-swap    "none"
+         :hx-vals    hx-vals
+         :style      {:background    "rgba(255,255,255,0.2)"
                       :touch-action  "none"
                       :cursor        "crosshair"
                       :border-radius "5px"} }
-        #_[:svg
-           (-> (svg-clj.elements/polygon (map (fn [[_ {:keys [x y]}]] [x y]) @asdf-pts))
-               (svg-clj.transforms/style {:stroke "black"
-                                          :fill   "none"}))]]
-       (map (fn [[id {:keys [x y]}]]
-              (render-point-value control [x y]))
+        [:g
+         [:line {:stroke-width "1px" :stroke "red"   :x1 0 :y1 0 :x2 30 :y2 0}]
+         [:line {:stroke-width "1px" :stroke "green" :x1 0 :y1 0 :x2 0 :y2 30}]
+         [:circle
+          {:fill       "skyblue" :r 2 :cx 0 :cy 0}]]
+        (when (< 1 (count pts))
+          [:polygon
+           {:stroke "black"
+            :fill   "none"
+            :points (apply str (map (fn [pt-id]
+                                      (let [{:keys [x y]} (get pts pt-id)]
+                                        (str x "," y " "))) (range (count pts))))}])]
+       (mapv (fn [[id {:keys [x y]}]]
+              (render-point-value control pts id [x y]))
             pts))]))
 
 (defmulti render-control-block-result
